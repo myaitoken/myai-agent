@@ -47,7 +47,11 @@ HEARTBEAT_INTERVAL = int(_env("HEARTBEAT_INTERVAL", "30"))
 def http(method: str, url: str, body: dict = None, timeout: int = 30) -> dict:
     """Minimal HTTP client — no external deps."""
     data = json.dumps(body).encode() if body else None
-    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": f"myai-agent/{VERSION}",
+    }
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
