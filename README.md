@@ -1,5 +1,10 @@
 # MyAI GPU Agent
 
+[![PyPI version](https://badge.fury.io/py/myai-agent.svg)](https://pypi.org/project/myai-agent/)
+[![CI](https://github.com/myaitoken/myai-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/myaitoken/myai-agent/actions/workflows/ci.yml)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 Earn **MYAI tokens** by sharing your GPU compute power with the MyAI distributed inference network.
 
 Your GPU runs local AI inference via [Ollama](https://ollama.com). Jobs are dispatched from the [MyAI coordinator](https://api.myaitoken.io) and you earn MYAI on Base for every completed job.
