@@ -111,6 +111,27 @@ myai-agent --version          Print version
 | `--wallet 0x...` | — | Base EVM wallet for MYAI rewards |
 | `--name NAME` | hostname | Display name for this agent |
 | `--model MODEL` | `llama3.2` | Default Ollama model |
+| `--required-models M1,M2` | `bonsai-8b:latest` | Comma-separated models to auto-pull on startup |
+
+---
+
+## Auto Model Pull
+
+The agent automatically pulls required models on startup if they aren't already present in Ollama.
+
+**Default:** `bonsai-8b:latest` is pulled on every agent start if missing (~1.1 GB, 1-bit quantized).
+
+**Customize via env var:**
+```bash
+REQUIRED_MODELS=bonsai-8b:latest,deepseek-r1:7b myai-agent start
+```
+
+**Disable auto-pull:**
+```bash
+REQUIRED_MODELS="" myai-agent start
+```
+
+The pull streams progress to the log and blocks registration until complete — so the coordinator always sees accurate model lists.
 
 ---
 
