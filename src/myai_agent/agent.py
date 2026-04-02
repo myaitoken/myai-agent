@@ -25,7 +25,7 @@ from .config import get_config_dir
 
 log = logging.getLogger("myai_agent")
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 
 
 # ── Config ─────────────────────────────────────────────────────────────────────
@@ -40,6 +40,14 @@ AGENT_NAME         = _env("AGENT_NAME",         socket.gethostname())
 AGENT_WALLET       = _env("AGENT_WALLET",       "")
 POLL_INTERVAL      = int(_env("POLL_INTERVAL",  "5"))
 HEARTBEAT_INTERVAL = int(_env("HEARTBEAT_INTERVAL", "30"))
+
+# Comma-separated list of models to auto-pull on startup (if not already present).
+# e.g. REQUIRED_MODELS=bonsai-8b:latest,deepseek-r1:7b
+# Default includes bonsai-8b as the lightweight required model.
+REQUIRED_MODELS_RAW = _env("REQUIRED_MODELS", "bonsai-8b:latest")
+REQUIRED_MODELS: List[str] = [
+    m.strip() for m in REQUIRED_MODELS_RAW.split(",") if m.strip()
+]
 
 
 # ── HTTP ───────────────────────────────────────────────────────────────────────
@@ -91,6 +99,86 @@ def get_ollama_models(ollama_url: str = OLLAMA_URL) -> List[str]:
         return []
 
 
+def pull_model(model: str, ollama_url: str = OLLAMA_URL) -> bool:
+    """
+    Pull a model via Ollama streaming pull API.
+    Streams progress lines and returns True when 'success' status received.
+    Falls back gracefully if Ollama is unreachable.
+    """
+    log.info(f"Pulling model: {model} ...")
+    url = f"{ollama_url}/api/pull"
+    data = json.dumps({"name": model, "stream": True}).encode()
+    req = urllib.request.Request(url, data=data,
+                                 headers={"Content-Type": "application/json"},
+                                 method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=600) as resp:
+            last_status = ""
+            while True:
+                line = resp.readline()
+                if not line:
+                    break
+                try:
+                    obj = json.loads(line.decode().strip())
+                    status = obj.get("status", "")
+                    if status != last_status:
+                        log.info(f"  [{model}] {status}")
+                        last_status = status
+                    if status == "success":
+                        log.info(f"  ✓ {model} pulled successfully")
+                        return True
+                    # Error in stream
+                    if "error" in obj:
+                        log.error(f"  ✗ Pull error for {model}: {obj['error']}")
+                        return False
+                except json.JSONDecodeError:
+                    continue
+        # If we got here without 'success', treat as complete (older Ollama versions)
+        log.info(f"  ✓ {model} pull stream ended")
+        return True
+    except urllib.error.HTTPError as e:
+        log.error(f"  ✗ Pull HTTP {e.code} for {model}: {e.read().decode()[:200]}")
+        return False
+    except Exception as e:
+        log.error(f"  ✗ Pull failed for {model}: {e}")
+        return False
+
+
+def ensure_models(required: List[str], ollama_url: str = OLLAMA_URL) -> None:
+    """
+    Check which required models are missing from Ollama and pull them.
+    Skips models that are already present. Non-blocking on failure.
+    """
+    if not required:
+        return
+
+    existing = set(get_ollama_models(ollama_url))
+    if not existing and not _ollama_reachable(ollama_url):
+        log.warning("Ollama not reachable — skipping model pre-pull")
+        return
+
+    # Normalize: treat "model:latest" == "model" as equal
+    def norm(m: str) -> str:
+        return m if ":" in m else f"{m}:latest"
+
+    existing_norm = {norm(m) for m in existing}
+
+    for model in required:
+        if norm(model) in existing_norm:
+            log.info(f"  ✓ {model} already present — skip")
+        else:
+            log.info(f"  ↓ {model} not found — pulling now")
+            pull_model(model, ollama_url)
+
+
+def _ollama_reachable(ollama_url: str = OLLAMA_URL) -> bool:
+    try:
+        urllib.request.urlopen(f"{ollama_url}/api/tags", timeout=5)
+        return True
+    except Exception:
+        return False
+
+
 def run_ollama(model: str, prompt: str, ollama_url: str = OLLAMA_URL, timeout: int = 120) -> str:
     """Run inference. Detects JSON messages array → /api/chat, else → /api/generate."""
     if prompt.strip().startswith("["):
@@ -117,6 +205,7 @@ class MyAIAgent:
         wallet: str = AGENT_WALLET,
         poll_interval: int = POLL_INTERVAL,
         heartbeat_interval: int = HEARTBEAT_INTERVAL,
+        required_models: List[str] = None,
     ):
         self.coordinator_url    = coordinator_url.rstrip("/")
         self.ollama_url         = ollama_url.rstrip("/")
@@ -125,7 +214,16 @@ class MyAIAgent:
         self.poll_interval      = poll_interval
         self.heartbeat_interval = heartbeat_interval
         self.agent_id           = load_agent_id()
+        self.required_models    = required_models if required_models is not None else REQUIRED_MODELS
         self._running           = False
+
+    # ── Model Pre-pull ─────────────────────────────────────────────────────────
+
+    def ensure_models(self) -> None:
+        """Pull any required models not already present in Ollama."""
+        if self.required_models:
+            log.info(f"Checking required models: {', '.join(self.required_models)}")
+            ensure_models(self.required_models, self.ollama_url)
 
     # ── Registration ───────────────────────────────────────────────────────────
 
@@ -220,6 +318,9 @@ class MyAIAgent:
         log.info(f"  Coordinator : {self.coordinator_url}")
         log.info(f"  Ollama      : {self.ollama_url}")
         log.info(f"  Agent ID    : {self.agent_id}")
+
+        # Pre-pull required models before registering
+        self.ensure_models()
 
         # Register with retries
         for attempt in range(5):
