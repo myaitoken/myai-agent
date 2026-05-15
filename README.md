@@ -1,49 +1,54 @@
-# MyAI GPU Agent
+# myai-agent
 
 [![PyPI version](https://badge.fury.io/py/myai-agent.svg)](https://pypi.org/project/myai-agent/)
-[![CI](https://github.com/myaitoken/myai-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/myaitoken/myai-agent/actions/workflows/ci.yml)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Network](https://img.shields.io/badge/network-live-22c55e)](https://myaitoken.io/agents)
 
-Earn **MYAI tokens** by sharing your GPU compute power with the MyAI distributed inference network.
+**Earn MYAI tokens by sharing your GPU (or CPU) with the MyAI decentralized inference network.**
 
-Your GPU runs local AI inference via [Ollama](https://ollama.com). Jobs are dispatched from the [MyAI coordinator](https://api.myaitoken.io) and you earn MYAI on Base for every completed job.
+Your machine runs local AI inference via [Ollama](https://ollama.com). The MyAI coordinator dispatches jobs from paying users and your wallet receives MYAI on Base for every completed request — no staking, no lock-ups, no middlemen.
+
+```
+Install → Run → Earn
+```
 
 ---
 
-## Quick Install
+## One-line install
 
-**macOS / Linux:**
 ```bash
 curl -fsSL https://myaitoken.io/install | bash
 ```
 
-With your wallet address (to start earning immediately):
+With your wallet pre-set (start earning immediately):
+
 ```bash
-WALLET=0xYourWalletAddress curl -fsSL https://myaitoken.io/install | bash
+WALLET=0xYourAddress curl -fsSL https://myaitoken.io/install | bash
 ```
 
-**pip (any platform):**
+Or via pip:
+
 ```bash
 pip install myai-agent
-myai-agent install --wallet 0xYourWalletAddress
+myai-agent install --wallet 0xYourAddress
 ```
 
 ---
 
 ## Requirements
 
-| Requirement | Version | Notes |
-|---|---|---|
-| Python | 3.8+ | Zero external deps — pure stdlib |
-| [Ollama](https://ollama.com) | Any | Local inference engine |
-| GPU | Optional | CPU works too, just slower |
+| Requirement | Details |
+|---|---|
+| Python | 3.8+ (zero external dependencies — pure stdlib) |
+| [Ollama](https://ollama.ai) | Runs local inference. Any version. |
+| GPU | Optional — CPU works too, just slower |
 
-**Supported GPUs:** NVIDIA (CUDA), Apple Silicon (Metal), AMD (ROCm)
+**Supported GPU backends:** NVIDIA (CUDA) · Apple Silicon (Metal) · AMD (ROCm)
 
 ---
 
-## Manual Setup
+## Manual setup (3 steps)
 
 ### 1. Install Ollama
 
@@ -54,137 +59,157 @@ brew install --cask ollama
 # Linux
 curl -fsSL https://ollama.com/install.sh | sh
 
-# Windows
-# Download from https://ollama.com/download
+# Windows — download from https://ollama.com/download
 ```
 
 ### 2. Pull a model
 
 ```bash
-ollama pull llama3.2        # recommended (2GB, fast)
-ollama pull llama3.1:8b     # larger, better quality
-ollama pull mistral         # alternative
+ollama pull llama3.2          # 2 GB — fast, recommended for most rigs
+ollama pull qwen2.5:14b       # 9 GB — higher quality, better earnings
+ollama pull mistral           # 4 GB — solid all-rounder
 ```
+
+The agent auto-pulls `bonsai-8b:latest` on first start if nothing else is configured.
 
 ### 3. Install the agent
 
 ```bash
 pip install myai-agent
-```
 
-### 4. Run or install as service
+# Run as a persistent background service (auto-starts on login/reboot)
+myai-agent install --wallet 0xYourAddress --name "My Rig"
 
-**One-off run:**
-```bash
-myai-agent start --wallet 0xYourWallet
-```
-
-**Install as service (auto-starts on login):**
-```bash
-myai-agent install \
-  --wallet 0xYourWallet \
-  --name "My GPU Rig" \
-  --model llama3.2
+# Or run in the foreground to test
+myai-agent start --wallet 0xYourAddress
 ```
 
 ---
 
-## Commands
+## CLI reference
 
 ```
-myai-agent start              Run the agent (foreground)
-myai-agent install            Install as OS service
+myai-agent start              Run in foreground
+myai-agent install            Install as OS service (auto-start on login)
 myai-agent uninstall          Remove OS service
-myai-agent status             Check service status + agent ID
-myai-agent logs               Tail agent logs
-myai-agent models             List available Ollama models
-myai-agent run-job <prompt>   Test local inference
+myai-agent status             Show service status and agent ID
+myai-agent logs               Tail live logs
+myai-agent models             List Ollama models available on this machine
+myai-agent run-job <prompt>   Run a one-off local inference job (for testing)
 myai-agent --version          Print version
 ```
 
-### Options (start / install)
+### Flags for `start` / `install`
 
 | Flag | Default | Description |
 |---|---|---|
-| `--coordinator URL` | `https://api.myaitoken.io` | Coordinator endpoint |
-| `--ollama URL` | `http://localhost:11434` | Ollama endpoint |
-| `--wallet 0x...` | — | Base EVM wallet for MYAI rewards |
-| `--name NAME` | hostname | Display name for this agent |
+| `--wallet 0x...` | — | Base EVM address for MYAI rewards |
+| `--name NAME` | hostname | Display name on the network |
 | `--model MODEL` | `llama3.2` | Default Ollama model |
-| `--required-models M1,M2` | `bonsai-8b:latest` | Comma-separated models to auto-pull on startup |
+| `--required-models M1,M2` | `bonsai-8b:latest` | Models to auto-pull on startup |
+| `--coordinator URL` | `https://api.myaitoken.io` | Coordinator endpoint |
+| `--ollama URL` | `http://localhost:11434` | Ollama server |
 
 ---
 
-## Auto Model Pull
+## Configuration via environment variables
 
-The agent automatically pulls required models on startup if they aren't already present in Ollama.
-
-**Default:** `bonsai-8b:latest` is pulled on every agent start if missing (~1.1 GB, 1-bit quantized).
-
-**Customize via env var:**
-```bash
-REQUIRED_MODELS=bonsai-8b:latest,deepseek-r1:7b myai-agent start
-```
+| Variable | Default | Description |
+|---|---|---|
+| `AGENT_WALLET` | — | Base wallet address for MYAI payouts |
+| `AGENT_NAME` | hostname | Node display name |
+| `COORDINATOR_URL` | `https://api.myaitoken.io` | Coordinator API |
+| `OLLAMA_URL` | `http://localhost:11434` | Ollama server |
+| `REQUIRED_MODELS` | `bonsai-8b:latest` | Comma-separated models to auto-pull |
+| `POLL_INTERVAL` | `5` | Seconds between job polls |
+| `HEARTBEAT_INTERVAL` | `30` | Seconds between heartbeats |
 
 **Disable auto-pull:**
 ```bash
 REQUIRED_MODELS="" myai-agent start
 ```
 
-The pull streams progress to the log and blocks registration until complete — so the coordinator always sees accurate model lists.
+---
+
+## How jobs flow
+
+```
+User request
+    │
+    ▼
+MyAI Coordinator  (https://api.myaitoken.io)
+    │  dispatches job
+    ▼
+Your agent polls  GET /api/v1/agents/{id}/jobs/pending
+    │
+    ▼
+Ollama runs inference locally  POST /api/generate
+    │
+    ▼
+Result returned  POST /api/v1/agents/{id}/jobs/{job_id}/complete
+    │
+    ▼
+MYAI paid to your wallet on Base
+```
+
+Large jobs are automatically sharded across multiple agents for lower latency. Each contributing node gets a proportional share of the fee.
 
 ---
 
-## How It Works
-
-1. Agent registers with the coordinator and reports available GPUs + models
-2. Coordinator receives inference jobs from users
-3. Agent polls for pending jobs (`GET /api/v1/agents/{id}/jobs/pending`)
-4. Agent runs inference locally via Ollama (`POST /api/generate`)
-5. Results reported back to coordinator (`POST /api/v1/agents/{id}/jobs/{job_id}/complete`)
-6. MYAI tokens distributed to your wallet on Base *(Phase 3)*
-
-**Parallel inference:** Large jobs are split across multiple agents simultaneously for faster results.
-
----
-
-## Platform Notes
+## Platform notes
 
 ### macOS
-- Installed as a **launchd** service (`~/Library/LaunchAgents/io.myaitoken.agent.plist`)
-- Logs: `~/Library/Logs/myai-agent/agent.log`
-- Ollama recommended: `brew install --cask ollama`
+- Service: launchd plist at `~/Library/LaunchAgents/io.myaitoken.agent.plist`
+- Logs: `~/Library/Logs/myai-agent/agent.log` or `myai-agent logs`
 
 ### Linux
-- Installed as a **systemd user service** (`~/.config/systemd/user/myai-agent.service`)
-- Logs: `journalctl --user -u myai-agent -f`
+- Service: systemd user unit at `~/.config/systemd/user/myai-agent.service`
+- Logs: `journalctl --user -u myai-agent -f` or `myai-agent logs`
 
 ### Windows
-- Installed as a **Task Scheduler** task (runs on login)
-- Download Ollama from [ollama.com/download](https://ollama.com/download)
+- Service: Task Scheduler task (triggers on login)
+- Logs: check Task Scheduler history or redirect stdout in the task action
 
 ---
 
-## Configuration
+## Troubleshooting
 
-Environment variables (set in OS service config, or export before `myai-agent start`):
+**Agent registers but gets no jobs**
+- Confirm Ollama is running: `ollama ps`
+- Confirm at least one model is pulled: `myai-agent models`
+- Check coordinator reachability: `curl https://api.myaitoken.io/healthz`
 
-| Variable | Default | Description |
-|---|---|---|
-| `COORDINATOR_URL` | `https://api.myaitoken.io` | Coordinator API URL |
-| `OLLAMA_URL` | `http://localhost:11434` | Ollama server URL |
-| `AGENT_NAME` | hostname | Display name |
-| `AGENT_WALLET` | — | Base wallet for MYAI rewards |
-| `POLL_INTERVAL` | `5` | Seconds between job polls |
-| `HEARTBEAT_INTERVAL` | `30` | Seconds between heartbeats |
+**Ollama not found**
+- Default URL is `http://localhost:11434`. Override with `--ollama` or `OLLAMA_URL` if needed.
+
+**No MYAI earnings showing**
+- Payouts batch weekly and appear on Base. Check your address on [Basescan](https://basescan.org) or the [earnings dashboard](https://myaitoken.io/dashboard).
+- Make sure `--wallet` is set to a valid Base EVM address.
+
+**Service won't start after reboot**
+- macOS: `launchctl list | grep myaitoken`
+- Linux: `systemctl --user status myai-agent`
+- Run `myai-agent install` again to re-register the service.
 
 ---
 
-## MYAI Token
+## MYAI token
 
-- **Contract:** `0xaff22cc20434ce43b3ea10efe10e9360390d327c`
-- **Chain:** Base (Chain ID: 8453)
-- **Symbol:** MYAI | Supply: 1,000,000,000
+| | |
+|---|---|
+| Contract | `0xaff22cc20434ce43b3ea10efe10e9360390d327c` |
+| Chain | Base · Chain ID 8453 |
+| Symbol / Supply | MYAI · 1,000,000,000 |
+| DEX | [Aerodrome Finance](https://aerodrome.finance) |
+
+---
+
+## Links
+
+- [myaitoken.io](https://myaitoken.io) — main site
+- [Provider guide](https://myaitoken.io/earn) — earnings details and expected MYAI per job
+- [Live network](https://myaitoken.io/agents) — see active nodes right now
+- [Docs](https://myaitoken.io/docs) — full documentation
 
 ---
 
