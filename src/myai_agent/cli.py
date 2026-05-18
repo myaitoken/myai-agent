@@ -211,6 +211,60 @@ def cmd_run_job(args):
         sys.exit(1)
 
 
+
+
+# ── v3-C attestation commands ─────────────────────────────────────────────────
+
+def cmd_rotate_attest_key(args):
+    """Delete + regenerate the local ECDSA P-256 attestation key.
+
+    The next register will ship a NEW pubkey under the SAME agent_id. If the
+    coordinator already has a different pubkey on file for that agent_id (or
+    for that device_fingerprint under another wallet), the register call
+    will fail with HTTP 409 -- in which case the operator must delete the
+    stale agent row via brain admin before retrying.
+    """
+    _setup_logging()
+    from .attestation import Attestation
+    from .config import get_config_dir
+    import os
+
+    path = os.path.join(get_config_dir(), ".attest-key.pem")
+    att = Attestation(path)
+    print(f"Old pubkey: {att.pubkey_b64[:48] if att.pubkey_b64 else '(none)'}")
+    if att.rotate():
+        print(f"New pubkey: {att.pubkey_b64[:48]}...  ({path})")
+        print()
+        print("IMPORTANT: if your wallet already has a different attestation_pubkey")
+        print("on file, the next register call will be REJECTED with HTTP 409.")
+        print("Delete the stale agent row via brain admin BEFORE restarting:")
+        print("  curl -X DELETE https://api.myaitoken.io/api/v1/admin/agents/<old_id>")
+        print("Then restart the agent service.")
+        sys.exit(0)
+    print("Rotation failed.")
+    sys.exit(1)
+
+
+def cmd_show_pubkey(args):
+    """Print the local attestation pubkey + agent_id + device fingerprint."""
+    _setup_logging()
+    from .attestation import Attestation
+    from .config import get_config_dir
+    from .agent import load_agent_id
+    import os
+
+    path     = os.path.join(get_config_dir(), ".attest-key.pem")
+    att      = Attestation(path)
+    agent_id = load_agent_id()
+
+    print(f"agent_id    : {agent_id}")
+    print(f"pubkey_b64  : {att.pubkey_b64}")
+    print(f"fingerprint : {att.device_fingerprint()}")
+    print(f"alg         : ecdsa-p256-sha256 (SEC1 uncompressed pubkey, raw r||s sig, base64url no-pad)")
+    print(f"key_path    : {path}")
+    print(f"available   : {att.available}")
+
+
 # ── Parser ────────────────────────────────────────────────────────────────────
 
 def build_parser() -> argparse.ArgumentParser:
@@ -262,6 +316,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_models.add_argument("--ollama", metavar="URL", help="Ollama URL")
     p_models.set_defaults(func=cmd_models)
 
+    # ── show-pubkey ────────────────────────────────────────────────────────────
+    p_sp = sub.add_parser("show-pubkey", help="Print v3-C attestation pubkey + fingerprint")
+    p_sp.set_defaults(func=cmd_show_pubkey)
+
+    # ── rotate-attest-key ──────────────────────────────────────────────────────
+    p_ra = sub.add_parser("rotate-attest-key",
+                           help="Delete + regenerate the v3-C attestation key")
+    p_ra.set_defaults(func=cmd_rotate_attest_key)
+
     # ── run-job ────────────────────────────────────────────────────────────────
     p_run = sub.add_parser("run-job", help="Run a single inference job locally")
     p_run.add_argument("prompt", nargs="+", help="Prompt text")
@@ -274,6 +337,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main():
+    # v3-C: top-level shortcuts (match single-file agent convention)
+    if "--rotate-attest-key" in sys.argv:
+        cmd_rotate_attest_key(None); return
+    if "--show-pubkey" in sys.argv:
+        cmd_show_pubkey(None); return
     parser = build_parser()
     args   = parser.parse_args()
     args.func(args)

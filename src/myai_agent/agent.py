@@ -21,11 +21,12 @@ import uuid
 from typing import List, Dict, Any, Optional
 
 from . import gpu as gpu_mod
+from .attestation import Attestation
 from .config import get_config_dir
 
 log = logging.getLogger("myai_agent")
 
-VERSION = "2.1.0"
+VERSION = "2.2.0"  # v3-C: ECDSA P-256 attestation
 
 
 # ── Config ─────────────────────────────────────────────────────────────────────
@@ -216,6 +217,12 @@ class MyAIAgent:
         self.agent_id           = load_agent_id()
         self.required_models    = required_models if required_models is not None else REQUIRED_MODELS
         self._running           = False
+        # v3-C attestation -- per-node ECDSA P-256 key, persisted at
+        # $config_dir/.attest-key.pem mode 600. Coordinator falls back to
+        # 0.5x earnings multiplier if attestation fields are absent.
+        self.attest             = Attestation(
+            os.path.join(get_config_dir(), ".attest-key.pem")
+        )
 
     # ── Model Pre-pull ─────────────────────────────────────────────────────────
 
@@ -235,15 +242,54 @@ class MyAIAgent:
             "agent_id":           self.agent_id,
             "agent_name":         self.name,
             "version":            VERSION,
-            "platform":           platform.system(),
+            # v3-A/v3-C: coordinator enum is {browser-webgpu, mobile, native}
+            "platform":           "native",
+            "platform_os":        platform.system(),
             "ollama_url":         self.ollama_url,
             "gpus":               gpus,
             "models":             models,
             "wallet_address":     self.wallet,
             "price_per_hour_myai": 1.0,
         }
+        # v3-C attestation envelope
+        if self.attest.available:
+            payload["attestation_pubkey_b64"] = self.attest.pubkey_b64
+            payload["device_fingerprint"]     = self.attest.device_fingerprint()
+            payload["attest_alg"]             = "ecdsa-p256-sha256"
+            payload.update(self.attest.sign_envelope(self.agent_id))
 
-        resp = http("POST", f"{self.coordinator_url}/api/v1/agents/register", payload)
+        # Use a raw HTTP call so we can detect 409 (device-already-bound) and exit hard.
+        import urllib.request as _ur, urllib.error as _ue
+        try:
+            data = json.dumps(payload).encode()
+            req = _ur.Request(
+                f"{self.coordinator_url}/api/v1/agents/register",
+                data=data, method="POST",
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "User-Agent": f"myai-agent/{VERSION}",
+                },
+            )
+            with _ur.urlopen(req, timeout=30) as r:
+                resp = json.loads(r.read().decode())
+        except _ue.HTTPError as e:
+            if e.code == 409:
+                body = e.read().decode()[:400]
+                log.error(
+                    "v3c-attest: REGISTRATION REJECTED 409 -- device fingerprint "
+                    "or attestation pubkey already bound to a DIFFERENT wallet: %s", body
+                )
+                log.error(
+                    "If you moved hardware, delete the stale agent row via brain admin "
+                    "then run `myai-agent --rotate-attest-key` before retrying."
+                )
+                sys.exit(1)
+            log.warning("Register HTTP %d: %s", e.code, e.read().decode()[:200])
+            resp = {}
+        except Exception as e:
+            log.debug("Register request failed: %s", e)
+            resp = {}
         if resp.get("success"):
             log.info(f"Registered as '{self.name}' (id={self.agent_id})")
             if gpus:
@@ -261,9 +307,12 @@ class MyAIAgent:
             time.sleep(self.heartbeat_interval)
             if not self._running:
                 break
+            body = {"status": "online"}
+            if self.attest.available:
+                body.update(self.attest.sign_envelope(self.agent_id))
             resp = http("POST",
                         f"{self.coordinator_url}/api/v1/agents/{self.agent_id}/heartbeat",
-                        {"status": "online"})
+                        body)
             if resp.get("success"):
                 log.debug("Heartbeat ok")
             else:
@@ -273,9 +322,12 @@ class MyAIAgent:
     # ── Job handling ───────────────────────────────────────────────────────────
 
     def _complete_job(self, job_id: str, result: str, success: bool = True):
+        body = {"success": success, "result": result}
+        if self.attest.available:
+            body.update(self.attest.sign_envelope(self.agent_id))
         http("POST",
              f"{self.coordinator_url}/api/v1/agents/{self.agent_id}/jobs/{job_id}/complete",
-             {"success": success, "result": result})
+             body)
 
     def _process_job(self, job: dict):
         job_id = job.get("job_id", "unknown")
@@ -318,6 +370,10 @@ class MyAIAgent:
         log.info(f"  Coordinator : {self.coordinator_url}")
         log.info(f"  Ollama      : {self.ollama_url}")
         log.info(f"  Agent ID    : {self.agent_id}")
+        if self.attest.available:
+            log.info(f"  Attestation : ECDSA P-256 pubkey {self.attest.pubkey_b64[:24]}...")
+        else:
+            log.info(f"  Attestation : DISABLED (set MYAI_DISABLE_ATTESTATION=0 or install `cryptography`)")
 
         # Pre-pull required models before registering
         self.ensure_models()
