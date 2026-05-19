@@ -868,9 +868,12 @@
     log(`Loading embedding model ${EMBED_MODEL_ID}...`, 'l-info');
     const t0 = performance.now();
     try {
+      const _isIOS = (detectPlatform() === 'ios');
       embedder = await pipeline('feature-extraction', EMBED_MODEL_ID, {
         device: useDevice,
-        dtype:  useDevice === 'webgpu' ? 'fp32' : 'q8',
+        // iOS gets q8 even on WebGPU — fp32 weights push the tab past iOS's
+        // per-tab memory limit while the tokenizer + onnx runtime are loaded.
+        dtype:  _isIOS ? 'q8' : (useDevice === 'webgpu' ? 'fp32' : 'q8'),
       });
       const dt = ((performance.now() - t0) / 1000).toFixed(1);
       log(`Embedding model loaded in ${dt}s.`, 'l-ok');
@@ -1001,7 +1004,7 @@
         memory_free_mb: 0,
         backend:      'webgpu',
       }],
-      models:                       [modelId, EMBED_MODEL_ID],
+      models:                       (detectPlatform() === 'ios') ? [EMBED_MODEL_ID] : [modelId, EMBED_MODEL_ID],
       wallet_address:               $('wallet').value || null,
       price_per_hour_myai:          0.25,
       tensor_parallel_supported:    false,
@@ -1215,8 +1218,16 @@
     if (!webgpuOK && !wasmOK && !(await checkBackend())) return;
     $('startBtn').disabled = true;
     setDot('dotAgent', 'warn');
+    // iOS: text-gen + embed at once OOMs iPhone Safari/Chrome and the tab reloads.
+    // Skip text-gen entirely on iOS; eager-load embed so the first job is instant.
+    const _iosEmbedOnly = (detectPlatform() === 'ios');
     try {
-      await loadModel($('model').value);
+      if (_iosEmbedOnly) {
+        log('iOS detected — embed-only mode (skipping text-gen to avoid OOM-kill)', 'l-mut');
+        await loadEmbedderLazy();
+      } else {
+        await loadModel($('model').value);
+      }
     } catch (e) {
       log('Model load failed: ' + e.message, 'l-err');
       $('startBtn').disabled = false;
