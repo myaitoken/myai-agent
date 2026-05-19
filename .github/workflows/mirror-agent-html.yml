@@ -1,0 +1,58 @@
+# Mirrors browser/agent.html from this repo into Infinihash/infinihash-web@master
+# and triggers the production deploy. Runs only when the file changes on main.
+#
+# Required repo secrets:
+#   INFINIHASH_WEB_PAT     PAT with `repo` scope on Infinihash/infinihash-web
+#   INFRA_GATEWAY_TOKEN    Bearer token for https://gateway.infinihash.com
+name: mirror agent.html
+on:
+  push:
+    branches: [main]
+    paths: ['browser/agent.html']
+  workflow_dispatch: {}
+
+concurrency:
+  group: mirror-agent-html
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout source (myai-agent)
+        uses: actions/checkout@v4
+        with:
+          path: src
+
+      - name: Checkout target (infinihash-web)
+        uses: actions/checkout@v4
+        with:
+          repository: Infinihash/infinihash-web
+          ref: master
+          token: ${{ secrets.INFINIHASH_WEB_PAT }}
+          path: target
+
+      - name: Copy + commit
+        id: commit
+        run: |
+          cp src/browser/agent.html target/agent.html
+          cd target
+          if git diff --quiet -- agent.html; then
+            echo "no change in agent.html — skipping commit"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name  "myai-agent mirror bot"
+          git config user.email "ci@infinihash.com"
+          git add agent.html
+          git commit -m "mirror(agent.html): from myaitoken/myai-agent@${GITHUB_SHA::7}"
+          git push origin master
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger production deploy
+        if: steps.commit.outputs.changed == 'true'
+        run: |
+          curl -sS --fail --max-time 180 -X POST \
+            -H "Authorization: Bearer ${{ secrets.INFRA_GATEWAY_TOKEN }}" \
+            https://gateway.infinihash.com/deploy/infinihash-web
