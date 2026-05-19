@@ -848,6 +848,9 @@
 
   // ── Transformers.js dynamic import ──
   let pipeline, env, generator;
+  // Embedding pipeline (lazy-loaded on first embed job).
+  let embedder = null;
+  const EMBED_MODEL_ID = 'Xenova/all-MiniLM-L6-v2';
   async function loadTransformers() {
     if (pipeline) return;
     log('Loading Transformers.js from CDN...', 'l-info');
@@ -857,6 +860,25 @@
     env.allowLocalModels = false;
     env.useBrowserCache = true;
     log('Transformers.js loaded.', 'l-ok');
+  }
+
+  async function loadEmbedderLazy() {
+    if (embedder) return;
+    await loadTransformers();
+    log(`Loading embedding model ${EMBED_MODEL_ID}...`, 'l-info');
+    const t0 = performance.now();
+    try {
+      embedder = await pipeline('feature-extraction', EMBED_MODEL_ID, {
+        device: useDevice,
+        dtype:  useDevice === 'webgpu' ? 'fp32' : 'q8',
+      });
+      const dt = ((performance.now() - t0) / 1000).toFixed(1);
+      log(`Embedding model loaded in ${dt}s.`, 'l-ok');
+    } catch (e) {
+      embedder = null;
+      log(`Embedding model load failed: ${e.message}`, 'l-err');
+      throw e;
+    }
   }
 
   // Fallback chain: if a model fails (gated, too large, network error) try the next smaller one
@@ -979,7 +1001,7 @@
         memory_free_mb: 0,
         backend:      'webgpu',
       }],
-      models:                       [modelId],
+      models:                       [modelId, EMBED_MODEL_ID],
       wallet_address:               $('wallet').value || null,
       price_per_hour_myai:          0.25,
       tensor_parallel_supported:    false,
@@ -1092,12 +1114,46 @@
     return typeof text === 'string' ? text.slice(prompt.length).trim() : JSON.stringify(out);
   }
 
+  function isEmbedJob(job) {
+    const m = String(job.model || '').toLowerCase();
+    return m === EMBED_MODEL_ID.toLowerCase()
+        || m.includes('minilm')
+        || m.includes('all-minilm')
+        || m.includes('embed');
+  }
+
+  async function runEmbedding(text) {
+    await loadEmbedderLazy();
+    const out = await embedder(text, { pooling: 'mean', normalize: true });
+    // transformers.js returns a Tensor; .data is a Float32Array.
+    const data = out?.data ?? out;
+    const arr = data instanceof Float32Array ? Array.from(data) : Array.from(data || []);
+    if (!arr.length) throw new Error('empty embedding tensor');
+    return arr.map((x) => +x);
+  }
+
   async function processJob(job) {
     const jobId = job.job_id || job.id || 'unknown';
     const prompt = job.prompt || '';
     log(`job ${jobId} -- model=${job.model || '?'} prompt=${(prompt+'').slice(0,60).replace(/\n/g,' ')}...`, 'l-info');
     if (!prompt) {
       await completeJob(jobId, '', false);
+      return;
+    }
+    // Embedding jobs: short-circuit to the feature-extraction pipeline.
+    if (isEmbedJob(job)) {
+      try {
+        const t0e = performance.now();
+        const vec = await runEmbedding(prompt);
+        const dte = ((performance.now() - t0e) / 1000).toFixed(2);
+        log(`  embed ok (${vec.length}d in ${dte}s)`, 'l-ok');
+        totalJobs += 1;
+        $('stJobs').textContent = totalJobs;
+        await completeJob(jobId, JSON.stringify(vec), true);
+      } catch (e) {
+        log(`  embed failed: ${e.message}`, 'l-err');
+        await completeJob(jobId, '', false);
+      }
       return;
     }
     try {
