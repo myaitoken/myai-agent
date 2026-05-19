@@ -1,0 +1,1293 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MyAI Browser Agent — Run a Node in Your Tab (WebGPU)</title>
+  <meta name="description" content="Join the MyAI decentralized GPU compute network from your browser. No install. WebGPU inference. Earn MYAI tokens for jobs you serve." />
+  <meta property="og:title" content="MyAI Browser Agent — WebGPU" />
+  <meta property="og:description" content="Open a tab. Run a node. Earn MYAI. No install required." />
+  <meta property="og:url" content="https://agent.myaitoken.io" />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://myaitoken.io/og-image.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="canonical" href="https://agent.myaitoken.io" />
+  <link rel="icon" href="https://myaitoken.io/favicon.ico" />
+  <!-- Coinbase Wallet SDK v4 — Smart Wallet (passkey, no seed phrase) on Base -->
+  <script src="https://cdn.jsdelivr.net/npm/@coinbase/wallet-sdk@4/dist/browser.js"></script>
+
+  <!-- Google Analytics GA4 (same as parent site) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-YEB23ZXXBQ"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-YEB23ZXXBQ');
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --bg:        #020617;
+      --bg-2:      #0b1224;
+      --panel:     #0f172a;
+      --panel-2:   #111c34;
+      --border:    #1e293b;
+      --border-2:  #2a3a5e;
+      --text:      #e2e8f0;
+      --muted:     #94a3b8;
+      --dim:       #64748b;
+      --brand:     #8b5cf6;
+      --brand-2:   #6366f1;
+      --brand-3:   #22d3ee;
+      --good:      #10b981;
+      --warn:      #f59e0b;
+      --bad:       #ef4444;
+      --grad:      linear-gradient(135deg, #8b5cf6 0%, #22d3ee 100%);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+      background-image:
+        radial-gradient(circle at 20% 10%, rgba(139, 92, 246, 0.12), transparent 50%),
+        radial-gradient(circle at 80% 30%, rgba(34, 211, 238, 0.10), transparent 50%);
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(2, 6, 23, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      max-width: 1200px; margin: 0 auto; padding: 0 1.5rem;
+      height: 60px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); font-weight: 700; }
+    .logo-mark {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: var(--grad);
+      display: grid; place-items: center;
+      color: white; font-weight: 800; font-size: 14px;
+    }
+    .nav-links { display: flex; gap: 1.5rem; align-items: center; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 14px; }
+    .nav-links a:hover { color: var(--text); }
+
+    /* ── LAYOUT ── */
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+    h1 { font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 800; letter-spacing: -0.02em; line-height: 1.15; }
+    h1 .grad {
+      background: var(--grad);
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .lede { color: var(--muted); margin-top: 0.75rem; font-size: 1.05rem; max-width: 700px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 1.5rem;
+      margin-top: 2rem;
+    }
+    @media (max-width: 880px) { .grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.25rem;
+    }
+    .card h3 {
+      font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--muted); font-weight: 600; margin-bottom: 1rem;
+    }
+    .card h3 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--dim); vertical-align: middle; }
+    .card h3 .dot.live { background: var(--good); box-shadow: 0 0 8px rgba(16, 185, 129, 0.6); animation: pulse 2s infinite; }
+    .card h3 .dot.warn { background: var(--warn); }
+    .card h3 .dot.bad { background: var(--bad); }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+    /* ── form ── */
+    label { display: block; font-size: 0.78rem; color: var(--muted); margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    input, select {
+      width: 100%; padding: 0.6rem 0.75rem;
+      background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 8px;
+      color: var(--text); font-family: inherit; font-size: 0.92rem;
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus { outline: none; border-color: var(--brand); }
+    .field { margin-bottom: 1rem; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+
+    button {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 0.75rem 1.5rem;
+      background: var(--grad);
+      color: white; border: none; border-radius: 8px;
+      font-family: inherit; font-weight: 600; font-size: 0.95rem;
+      cursor: pointer;
+      transition: transform 0.1s, opacity 0.15s;
+      width: 100%;
+    }
+    button:hover:not(:disabled) { transform: translateY(-1px); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.danger { background: linear-gradient(135deg, #ef4444 0%, #f59e0b 100%); }
+    button.ghost { background: transparent; border: 1px solid var(--border-2); color: var(--text); }
+    button.sm { padding: 0.45rem 0.9rem; font-size: 0.82rem; width: auto; }
+
+    /* ── easy-setup card ── */
+    .setup-card {
+      background: linear-gradient(135deg, rgba(139,92,246,0.08), rgba(34,211,238,0.05));
+      border: 1px solid rgba(139,92,246,0.25);
+      border-radius: 12px; padding: 1.1rem 1.2rem; margin-bottom: 1rem;
+    }
+    .setup-card .sc-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 0.2rem; }
+    .setup-card .sc-sub  { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.8rem; }
+    .setup-card input { font-size: 0.9rem; }
+    .addr-display {
+      font-family: 'JetBrains Mono', monospace; font-size: 0.78rem;
+      color: var(--brand-3); word-break: break-all;
+      background: var(--bg-2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.5rem 0.75rem; margin: 0.5rem 0;
+    }
+    .setup-managed {
+      font-size: 0.78rem; color: var(--muted);
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    }
+
+    /* ── stats ── */
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .stat {
+      background: var(--bg-2); border: 1px solid var(--border);
+      padding: 0.9rem; border-radius: 10px;
+    }
+    .stat .v { font-size: 1.5rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--text); }
+    .stat .l { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 0.2rem; }
+    .stat.acc .v { background: var(--grad); background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+    /* ── log ── */
+    #log {
+      background: #000; border-radius: 8px;
+      padding: 0.75rem; height: 280px; overflow-y: auto;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; line-height: 1.5;
+      color: #a0e8a0; border: 1px solid var(--border);
+    }
+    #log .line { margin-bottom: 2px; word-wrap: break-word; }
+    #log .l-err { color: #ff6b6b; }
+    #log .l-warn { color: #ffd166; }
+    #log .l-ok { color: #06d6a0; }
+    #log .l-info { color: #61a0ff; }
+    #log .l-mut { color: #6b7c93; }
+
+    /* ── webgpu banner ── */
+    .banner {
+      padding: 0.75rem 1rem; border-radius: 10px;
+      font-size: 0.88rem; margin-bottom: 1rem;
+      border: 1px solid var(--border-2);
+    }
+    .banner.good { background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.3); color: #6ee7b7; }
+    .banner.bad  { background: rgba(239, 68, 68, 0.08); border-color: rgba(239, 68, 68, 0.3); color: #fca5a5; }
+    .banner.warn { background: rgba(245, 158, 11, 0.08); border-color: rgba(245, 158, 11, 0.3); color: #fcd34d; }
+
+    .pill {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      font-size: 0.7rem; font-weight: 600;
+      background: rgba(139, 92, 246, 0.15); color: #c4b5fd;
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      vertical-align: middle; margin-left: 6px;
+    }
+    .pill.beta { background: rgba(245, 158, 11, 0.15); color: #fcd34d; border-color: rgba(245, 158, 11, 0.3); }
+
+    /* ── how-it-works ── */
+    .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-top: 2.5rem; }
+    @media (max-width: 720px) { .steps { grid-template-columns: 1fr 1fr; } }
+    .step {
+      background: var(--panel); border: 1px solid var(--border);
+      padding: 1rem; border-radius: 12px;
+    }
+    .step .n {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--grad); display: grid; place-items: center;
+      color: white; font-weight: 700; font-size: 0.85rem; margin-bottom: 0.6rem;
+    }
+    .step .t { font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem; }
+    .step .d { font-size: 0.82rem; color: var(--muted); }
+
+    footer {
+      margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+      text-align: center; color: var(--dim); font-size: 0.8rem;
+    }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--text); }
+
+    .small { font-size: 0.78rem; color: var(--muted); }
+    code { font-family: 'JetBrains Mono', monospace; font-size: 0.85em; background: var(--bg-2); padding: 1px 5px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a class="logo" href="https://myaitoken.io">
+      <div class="logo-mark">M</div>
+      <span>MyAI Browser Agent</span>
+    </a>
+    <div class="nav-links">
+      <a href="https://myaitoken.io">Home</a>
+      <a href="https://myaitoken.io/network">Network</a>
+      <a href="https://myaitoken.io/docs">Docs</a>
+    </div>
+  </div>
+</nav>
+
+<div class="wrap">
+
+  <h1>Run a MyAI node in your <span class="grad">browser tab</span><span class="pill beta">BETA</span></h1>
+  <p class="lede">
+    No install. No CLI. WebGPU inference runs in your tab, picks up jobs from the
+    MyAI coordinator, and earns MYAI tokens to your wallet address. Closing the tab
+    stops the node.
+  </p>
+
+  <div id="gpuBanner" class="banner warn">Checking WebGPU support...</div>
+
+  <div class="grid">
+    <!-- LEFT: settings + log -->
+    <div>
+      <div class="card">
+        <h3><span id="dotAgent" class="dot"></span>Agent Settings</h3>
+
+        <div class="field">
+          <label for="model">Model</label>
+          <select id="model">
+            <option value="HuggingFaceTB/SmolLM2-135M-Instruct" data-dtype="q8" data-size="~135MB" data-cpu-ok="1" selected>SmolLM2-135M (CPU-safe, ~135MB) ✦ iPhone/Console</option>
+            <option value="HuggingFaceTB/SmolLM2-360M-Instruct" data-dtype="q8" data-size="~280MB" data-cpu-ok="1">SmolLM2-360M (fast, ~280MB)</option>
+            <option value="onnx-community/Qwen2.5-0.5B-Instruct" data-dtype="q4" data-size="~500MB">Qwen2.5-0.5B (recommended, ~500MB)</option>
+            <option value="onnx-community/Qwen2.5-1.5B-Instruct-q4f16" data-dtype="q4f16" data-size="~1.1GB">Qwen2.5-1.5B (quality, ~1.1GB)</option>
+            <option value="onnx-community/Llama-3.2-1B-Instruct-q4f16" data-dtype="q4f16" data-size="~0.7GB">Llama-3.2-1B (quality, ~0.7GB)</option>
+          </select>
+        </div>
+
+        <!-- ── Easy setup for non-crypto users ── -->
+        <div id="setupCard" class="setup-card">
+          <div class="sc-title">⚡ New here? Create your earnings wallet</div>
+          <div class="sc-sub">No seed phrase. No app download. Just a passkey — secured the same way your phone unlocks.</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <button id="setupBtn" class="sm" style="width:auto;white-space:nowrap;background:var(--grad);color:#fff;border:none;">
+              🔵 Create Smart Wallet (free)
+            </button>
+            <span style="font-size:0.75rem;color:var(--dim);">Powered by Coinbase · Base network</span>
+          </div>
+          <div id="setupResult" style="display:none;margin-top:0.6rem;">
+            <div style="font-size:0.8rem;color:var(--good);font-weight:600;margin-bottom:2px;">
+              ✅ Wallet connected!
+            </div>
+            <div class="addr-display" id="setupAddrDisplay"></div>
+            <div class="setup-managed">
+              <span>🛡 Non-custodial · recoverable via passkey</span>
+              <span>·</span>
+              <a href="#" id="setupAdvanced" style="color:var(--dim);">I have my own wallet</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="name">Display name</label>
+            <input id="name" placeholder="browser-anon" />
+          </div>
+          <div class="field" id="walletField">
+            <label for="wallet">Earnings address</label>
+            <div style="display:flex;gap:6px;align-items:stretch;">
+              <input id="wallet" placeholder="0x..." style="flex:1;min-width:0;" />
+              <button id="pasteWalletBtn" class="ghost" title="Paste from clipboard"
+                style="width:auto;padding:0 10px;font-size:1rem;flex-shrink:0;">📋</button>
+              <button id="connectWalletBtn" class="ghost" title="Connect existing wallet (MetaMask / Coinbase / WalletConnect)"
+                style="width:auto;padding:0 10px;font-size:0.78rem;white-space:nowrap;flex-shrink:0;">Connect</button>
+            </div>
+            <div id="walletHint" style="font-size:0.73rem;color:var(--muted);margin-top:4px;display:none;"></div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="coordUrl">Coordinator</label>
+          <input id="coordUrl" value="https://api.myaitoken.io" />
+        </div>
+
+        <div class="row">
+          <button id="startBtn">Start agent</button>
+          <button id="stopBtn" class="danger" disabled>Stop</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:1rem">
+        <h3><span id="dotLog" class="dot"></span>Agent log</h3>
+        <div id="log"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: stats -->
+    <div>
+      <div class="card">
+        <h3><span id="dotStatus" class="dot"></span>Status</h3>
+        <div class="stats">
+          <div class="stat"><div class="v" id="stModel">-</div><div class="l">Model</div></div>
+          <div class="stat"><div class="v" id="stState">idle</div><div class="l">State</div></div>
+          <div class="stat"><div class="v" id="stJobs">0</div><div class="l">Jobs served</div></div>
+          <div class="stat"><div class="v" id="stTok">0</div><div class="l">Tokens out</div></div>
+          <div class="stat acc"><div class="v" id="stEarn">0.00</div><div class="l">MYAI earned*</div></div>
+          <div class="stat"><div class="v" id="stUp">0s</div><div class="l">Uptime</div></div>
+        </div>
+        <p id="earningsBanner" class="small" style="margin-top:0.8rem">
+          <span id="placeholderNote">
+            *Earnings are <strong>placeholder</strong> until the coordinator confirms browser-agent
+            payout. Your wallet is recorded on registration and will be credited
+            retroactively if the coordinator enables payouts for this agent type.
+          </span>
+          <span id="payoutLive" style="display:none">
+            <span class="badge" style="background:#0a3;color:#fff;padding:2px 6px;border-radius:4px">BETA</span>
+            Real payout enabled. Daily: <strong id="stEarnDaily">0.00</strong> MYAI
+            &middot; Lifetime: <strong id="stEarnLife">0.00</strong> MYAI
+            <span id="throttleNote" style="display:none;color:#a60">
+              &middot; throttled (wallet reached daily cap)
+            </span>
+          </span>
+        </p>
+      </div>
+
+      <div class="card" style="margin-top:1rem">
+        <h3>GPU info</h3>
+        <div id="gpuInfo" class="small">Run a check to populate.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── HOW IT WORKS ── -->
+  <div class="steps">
+    <div class="step">
+      <div class="n">1</div><div class="t">Browser checks WebGPU</div>
+      <div class="d">Chrome 113+ (or Edge) with hardware acceleration on.</div>
+    </div>
+    <div class="step">
+      <div class="n">2</div><div class="t">Model loads to GPU</div>
+      <div class="d">Via Transformers.js + ONNX Runtime Web. Cached locally on first run.</div>
+    </div>
+    <div class="step">
+      <div class="n">3</div><div class="t">Register + poll</div>
+      <div class="d">Heartbeat to <code>api.myaitoken.io</code>. Poll for pending jobs.</div>
+    </div>
+    <div class="step">
+      <div class="n">4</div><div class="t">Inference + payout</div>
+      <div class="d">Each completed job returns a result; the coordinator credits MYAI to your wallet.</div>
+    </div>
+  </div>
+
+  <footer>
+    Beta. WebGPU agent v0.1.0 &mdash;
+    <a href="https://myaitoken.io/network">network</a> &middot;
+    <a href="https://myaitoken.io/docs">docs</a> &middot;
+    <a href="https://github.com/myaitoken">github</a>
+    <br/>
+    Closing this tab stops the agent. Your wallet address never leaves your browser except
+    in the registration payload sent to the coordinator.
+  </footer>
+
+</div>
+
+<!-- ── App logic: WebGPU check + Transformers.js loader + register/poll loop ── -->
+<script type="module">
+  // Coordinator endpoints (mirrors myai-agent.py)
+  const $ = (id) => document.getElementById(id);
+  const log = (msg, cls = 'l-mut') => {
+    const el = document.createElement('div');
+    el.className = 'line ' + cls;
+    el.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    $('log').appendChild(el);
+    $('log').scrollTop = $('log').scrollHeight;
+  };
+  const setDot = (id, state) => {
+    const d = $(id);
+    d.className = 'dot ' + (state || '');
+  };
+  const setBanner = (cls, msg) => {
+    const b = $('gpuBanner');
+    b.className = 'banner ' + cls;
+    b.textContent = msg;
+  };
+
+  // ── persist + restore form state ──
+  const LS = 'myai-browser-agent.v1';
+  const restore = () => {
+    try {
+      const s = JSON.parse(localStorage.getItem(LS) || '{}');
+      if (s.name)   $('name').value   = s.name;
+      if (s.wallet) $('wallet').value = s.wallet;
+      if (s.model)  $('model').value  = s.model;
+      if (s.coord)  $('coordUrl').value = s.coord;
+    } catch (_) {}
+  };
+  const persist = () => {
+    const s = {
+      name:  $('name').value,
+      wallet: $('wallet').value,
+      model: $('model').value,
+      coord: $('coordUrl').value,
+    };
+    localStorage.setItem(LS, JSON.stringify(s));
+  };
+  ['name','wallet','model','coordUrl'].forEach(id => $(id).addEventListener('change', persist));
+  restore();
+
+  // ── Wallet helpers: Paste + Connect ──
+  const setWallet = (addr) => {
+    $('wallet').value = addr;
+    persist();
+    $('walletHint').style.display = 'none';
+  };
+  const walletHint = (msg, ok) => {
+    const h = $('walletHint');
+    h.textContent = msg;
+    h.style.color = ok ? 'var(--good)' : 'var(--warn)';
+    h.style.display = 'block';
+  };
+
+  // 📋 Paste button
+  $('pasteWalletBtn').addEventListener('click', async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      const addr = text.trim();
+      if (/^0x[0-9a-fA-F]{40}$/.test(addr)) {
+        setWallet(addr);
+        walletHint('✓ Wallet pasted', true);
+      } else {
+        walletHint('Clipboard doesn\'t look like an 0x address — paste manually', false);
+      }
+    } catch (e) {
+      walletHint('Clipboard access denied — paste manually or use Connect', false);
+    }
+  });
+
+  // 🔗 Connect Wallet button — tries injected provider first, falls back to Coinbase SDK
+  $('connectWalletBtn').addEventListener('click', async () => {
+    const btn = $('connectWalletBtn');
+    btn.textContent = '…';
+    btn.disabled = true;
+    try {
+      let addr = null;
+      if (window.ethereum) {
+        // MetaMask / Brave / in-app browser injected provider
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        addr = accounts && accounts[0];
+      } else {
+        // No injected provider — use Coinbase Wallet SDK (shows QR + Smart Wallet option)
+        const provider = getCBProvider();
+        if (provider) {
+          const accounts = await provider.request({ method: 'eth_requestAccounts' });
+          addr = accounts && accounts[0];
+        }
+      }
+      if (addr) {
+        localStorage.setItem(WALLET_ADDR_LS, addr);
+        setWallet(addr);
+        $('setupCard').style.display = 'none';
+        walletHint('✓ Connected: ' + addr.slice(0,6) + '…' + addr.slice(-4), true);
+      } else {
+        // Last resort — deep links
+        const mmLink = `https://metamask.app.link/dapp/${location.host}${location.pathname}`;
+        walletHint('No wallet found. ', false);
+        $('walletHint').innerHTML +=
+          `<a href="${mmLink}" target="_blank" style="color:var(--brand);text-decoration:underline;">Open in MetaMask →</a>`;
+      }
+    } catch (e) {
+      walletHint('Connection failed: ' + e.message, false);
+    } finally {
+      btn.textContent = 'Connect';
+      btn.disabled = false;
+    }
+  });
+
+  // ── Easy wallet setup — Coinbase Smart Wallet (passkey, no seed phrase) ──
+  const WALLET_ADDR_LS = 'myai-browser-agent.wallet';
+
+  // Lazy-init Coinbase Wallet SDK (loaded from CDN in <head>)
+  let _cbProvider = null;
+  function getCBProvider() {
+    if (_cbProvider) return _cbProvider;
+    try {
+      // CoinbaseWalletSDK is the global from the CDN script
+      const sdk = new CoinbaseWalletSDK({
+        appName:    'MyAI Browser Agent',
+        appLogoUrl: 'https://myaitoken.io/favicon.ico',
+        appChainIds: [8453],          // Base mainnet
+      });
+      _cbProvider = sdk.makeWeb3Provider();
+    } catch (e) {
+      console.warn('Coinbase Wallet SDK init failed:', e.message);
+      _cbProvider = null;
+    }
+    return _cbProvider;
+  }
+
+  // Restore saved wallet address on load → collapse setup card
+  (function restoreWallet() {
+    const saved = localStorage.getItem(WALLET_ADDR_LS);
+    if (saved || $('wallet').value) {
+      if (saved && !$('wallet').value) setWallet(saved);
+      $('setupCard').style.display = 'none';
+    }
+  })();
+
+  // Setup button — open Coinbase Smart Wallet flow
+  $('setupBtn').addEventListener('click', async () => {
+    const btn = $('setupBtn');
+    btn.textContent = 'Opening wallet…';
+    btn.disabled = true;
+    try {
+      const provider = getCBProvider();
+      if (!provider) throw new Error('Coinbase Wallet SDK not available');
+      const accounts = await provider.request({ method: 'eth_requestAccounts' });
+      const addr = accounts && accounts[0];
+      if (!addr) throw new Error('No account returned');
+      localStorage.setItem(WALLET_ADDR_LS, addr);
+      setWallet(addr);
+      $('setupAddrDisplay').textContent = addr;
+      $('setupResult').style.display = 'block';
+      // Register with coordinator (fire-and-forget)
+      fetch('https://api.myaitoken.io/api/v1/waitlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wallet: addr,
+          name:   $('name') ? $('name').value.trim() : '',
+          source: 'browser-agent-smart-wallet'
+        })
+      }).catch(() => {});
+      // Bind "I have my own wallet" link
+      const advEl = document.getElementById('setupAdvanced');
+      if (advEl) advEl.addEventListener('click', (e) => {
+        e.preventDefault();
+        $('setupCard').style.display = 'none';
+        $('wallet').value = '';
+        $('wallet').focus();
+        walletHint('Enter your 0x wallet address above', false);
+      });
+    } catch (e) {
+      walletHint('Wallet setup failed: ' + e.message + '. Try "Connect" below or paste your address.', false);
+      // Fall through — user can still use paste/connect
+    } finally {
+      btn.textContent = '🔵 Create Smart Wallet (free)';
+      btn.disabled = false;
+    }
+  });
+
+  // "I have my own wallet" — also bind for initial HTML state
+  const _advEl = document.getElementById('setupAdvanced');
+  if (_advEl) _advEl.addEventListener('click', (e) => {
+    e.preventDefault();
+    $('setupCard').style.display = 'none';
+    $('wallet').value = '';
+    $('wallet').focus();
+    walletHint('Enter your 0x wallet address above', false);
+  });
+
+  // generate / restore agent id
+  const AGENT_ID_KEY = 'myai-browser-agent.id';
+  let AGENT_ID = localStorage.getItem(AGENT_ID_KEY);
+  if (!AGENT_ID) {
+    AGENT_ID = 'browser-' + crypto.randomUUID();
+    localStorage.setItem(AGENT_ID_KEY, AGENT_ID);
+  }
+
+  // ── Anti-sybil v2 piece 1: device fingerprint (canvas + WebGPU + screen + tz) ──
+  async function sha256Hex(buf) {
+    const dig = await crypto.subtle.digest('SHA-256', buf);
+    return Array.from(new Uint8Array(dig)).map(b => b.toString(16).padStart(2,'0')).join('');
+  }
+
+  function canvasFingerprint() {
+    try {
+      const c = document.createElement('canvas');
+      c.width = 220; c.height = 60;
+      const ctx = c.getContext('2d');
+      ctx.textBaseline = 'top';
+      ctx.font = "14px 'Inter', system-ui, sans-serif";
+      ctx.fillStyle = '#f60';
+      ctx.fillRect(10, 10, 60, 30);
+      ctx.fillStyle = '#069';
+      ctx.fillText('MyAI \u26A1 fp \uD83D\uDDFF', 4, 4);
+      ctx.fillStyle = 'rgba(102,204,0,0.7)';
+      ctx.fillText('Canvas-' + (navigator.platform || ''), 4, 22);
+      // Geometry primitive
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.fillStyle = 'rgb(255,0,255)';
+      ctx.beginPath(); ctx.arc(50, 30, 20, 0, Math.PI*2, true); ctx.closePath(); ctx.fill();
+      return c.toDataURL();
+    } catch (e) {
+      return 'no-canvas:' + (e.message || 'err');
+    }
+  }
+
+  async function computeDeviceFingerprint() {
+    // 1) Canvas fingerprint pixel data
+    const canvasUrl = canvasFingerprint();
+    // 2) WebGPU adapter info
+    let gpuInfoStr = 'no-gpu';
+    try {
+      if (navigator.gpu) {
+        const adapter = await navigator.gpu.requestAdapter();
+        if (adapter) {
+          let info = adapter.info || {};
+          if (!Object.keys(info).length && adapter.requestAdapterInfo) {
+            try { info = await adapter.requestAdapterInfo(); } catch (_) {}
+          }
+          gpuInfoStr = [info.vendor||'?', info.architecture||'?', info.device||'?', info.description||'?'].join('|');
+        }
+      }
+    } catch (_) { /* keep no-gpu */ }
+    // 3) Screen metrics
+    const screenStr = [
+      screen.width, screen.height,
+      window.devicePixelRatio || 1,
+      screen.colorDepth || 0,
+    ].join('x');
+    // 4) Timezone + lang + cores
+    const tzStr = [
+      new Date().getTimezoneOffset(),
+      navigator.language || '?',
+      navigator.languages ? navigator.languages.join(',') : '?',
+      navigator.hardwareConcurrency || 0,
+    ].join('|');
+    // Concat + SHA-256
+    const blob = ['v1', canvasUrl, gpuInfoStr, screenStr, tzStr].join('::');
+    const enc = new TextEncoder().encode(blob);
+    return await sha256Hex(enc);
+  }
+
+  // ── Anti-sybil v2 piece 2: ECDSA P-256 keypair (non-extractable) via Web Crypto ──
+  const ATTEST_DB = 'myai-browser-agent.attest';
+  const ATTEST_KEY_NAME = 'attest-privkey-v1';
+  const ATTEST_PUB_KEY = 'myai-browser-agent.attest.pub.v1';
+
+  function openAttestDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(ATTEST_DB, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('keys');
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function idbGet(name) {
+    const db = await openAttestDB();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('keys', 'readonly');
+      const r = tx.objectStore('keys').get(name);
+      r.onsuccess = () => res(r.result || null);
+      r.onerror = () => rej(r.error);
+    });
+  }
+  async function idbPut(name, val) {
+    const db = await openAttestDB();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('keys', 'readwrite');
+      tx.objectStore('keys').put(val, name);
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  }
+
+  async function loadOrGenerateAttestKey() {
+    let priv = await idbGet(ATTEST_KEY_NAME);
+    let pubB64 = localStorage.getItem(ATTEST_PUB_KEY);
+    if (priv && pubB64) return { priv, pubB64 };
+    // Generate non-extractable ECDSA P-256 keypair
+    const kp = await crypto.subtle.generateKey(
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      false,  // extractable=false  -> private key cannot leave the device
+      ['sign', 'verify']
+    );
+    const rawPub = await crypto.subtle.exportKey('raw', kp.publicKey);
+    pubB64 = btoa(String.fromCharCode(...new Uint8Array(rawPub)))
+      .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    await idbPut(ATTEST_KEY_NAME, kp.privateKey);
+    localStorage.setItem(ATTEST_PUB_KEY, pubB64);
+    log('Generated ECDSA P-256 attestation key (non-extractable, persisted in IndexedDB).', 'l-info');
+    return { priv: kp.privateKey, pubB64 };
+  }
+
+  async function signAttestation(priv, agentId) {
+    const ts = Math.floor(Date.now() / 1000);
+    const nonceBytes = new Uint8Array(16);
+    crypto.getRandomValues(nonceBytes);
+    const nonce = Array.from(nonceBytes).map(b => b.toString(16).padStart(2,'0')).join('');
+    const msg = `${agentId}|${ts}|${nonce}`;
+    const sigBuf = await crypto.subtle.sign(
+      { name: 'ECDSA', hash: 'SHA-256' }, priv, new TextEncoder().encode(msg)
+    );
+    const sig = btoa(String.fromCharCode(...new Uint8Array(sigBuf)))
+      .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    return { attest_ts: ts, attest_nonce: nonce, attest_sig: sig };
+  }
+
+  // Module-level state for the attestation key.
+  let ATTEST_PRIV = null;
+  let ATTEST_PUB_B64 = null;
+  let DEVICE_FINGERPRINT = null;
+
+  // ── Backend detection: WebGPU → WASM/CPU fallback ──
+  let webgpuOK = false;
+  let wasmOK   = false;
+  let useDevice = 'cpu';
+  let gpuAdapter = null;
+
+  function detectPlatform() {
+    const ua = navigator.userAgent || '';
+    if (/Xbox/i.test(ua))        return 'xbox';
+    if (/PlayStation/i.test(ua)) return 'playstation';
+    if (/iPhone|iPad|iPod/i.test(ua)) return 'ios';
+    if (/Android/i.test(ua))    return 'android';
+    return 'desktop';
+  }
+
+  async function checkWebGPU() { return checkBackend(); } // alias for compat
+
+  async function checkBackend() {
+    const platform = detectPlatform();
+
+    // ── Try WebGPU first. Allow on Chrome/Edge iOS (they support it); skip only on Safari iOS ──
+    const isIOS = platform === 'ios';
+    const ua2 = navigator.userAgent || '';
+    const isIOSSafari = isIOS && !/CriOS|EdgiOS|FxiOS|OPiOS/i.test(ua2);
+    if (!isIOSSafari && 'gpu' in navigator) {
+      try {
+        gpuAdapter = await navigator.gpu.requestAdapter();
+        if (gpuAdapter) {
+          const info = gpuAdapter.info || {};
+          try {
+            if (!Object.keys(info).length && typeof gpuAdapter.requestAdapterInfo === 'function') {
+              Object.assign(info, await gpuAdapter.requestAdapterInfo());
+            }
+          } catch (_) {}
+          const lim = gpuAdapter.limits || {};
+          const desc = info.description || info.device || info.vendor || 'unknown GPU';
+          const vram = lim.maxBufferSize ? (lim.maxBufferSize / (1024**3)).toFixed(2) + ' GB' : '?';
+          $('gpuInfo').innerHTML = `<strong>${desc}</strong><br/>vendor: ${info.vendor || '?'}<br/>arch: ${info.architecture || '?'}<br/>maxBufferSize: ${vram}`;
+          setBanner('good', 'WebGPU available. Pick a model and start the agent.');
+          webgpuOK = true;
+          wasmOK   = true;
+          useDevice = 'webgpu';
+          // Default to Qwen 0.5B on desktop WebGPU — best balance
+          // On iOS: keep SmolLM2-135M — 0.5B causes OOM-kill on iPhone GPU
+          if (!isIOS) {
+            const qwen = Array.from($('model').options).find(o => o.value.includes('Qwen2.5-0.5B'));
+            if (qwen) $('model').value = qwen.value;
+          }
+          return true;
+        }
+      } catch (e) {
+        log('WebGPU failed (' + e.message + ') — falling back to CPU/WASM', 'l-warn');
+      }
+    }
+
+    // ── WASM/CPU fallback — works on iOS, Xbox, PlayStation, Firefox, etc. ──
+    wasmOK   = true;
+    useDevice = 'wasm';
+
+    const platformLabel = isIOSSafari
+      ? 'iOS Safari'
+      : ({
+          ios:         'Chrome on iOS',
+          android:     'Android browser',
+          xbox:        'Xbox browser',
+          playstation: 'PlayStation browser',
+          desktop:     'this browser',
+        }[platform] || 'this browser');
+
+    setBanner('warn',
+      `WebGPU unavailable on ${platformLabel} — running CPU/WASM mode (slower). Use the smallest model.`);
+    $('gpuInfo').innerHTML =
+      `<span style="color:#fbbf24"><strong>CPU / WASM mode</strong></span>` +
+      `<br/>Platform: ${platformLabel}` +
+      `<br/>No GPU acceleration — inference will be slow`;
+
+    // Auto-select the smallest CPU-safe model
+    const opts = Array.from($('model').options);
+    const cpuOpt = opts.find(o => o.dataset.cpuOk);
+    if (cpuOpt) $('model').value = cpuOpt.value;
+
+    log(`${platformLabel}: no WebGPU — CPU/WASM inference active (expect 30-120s per response)`, 'l-warn');
+    $('startBtn').disabled = false;
+    return true;
+  }
+  // Bootstrap anti-sybil v2 artifacts (device fingerprint + attestation key)
+  try {
+    const ak = await loadOrGenerateAttestKey();
+    ATTEST_PRIV = ak.priv;
+    ATTEST_PUB_B64 = ak.pubB64;
+  } catch (e) {
+    log('Attestation key bootstrap failed (continuing unverified): ' + e.message, 'l-warn');
+  }
+  try {
+    DEVICE_FINGERPRINT = await computeDeviceFingerprint();
+    log('Device fingerprint: ' + (DEVICE_FINGERPRINT||'').slice(0,16) + '...', 'l-mut');
+  } catch (e) {
+    log('Fingerprint compute failed: ' + e.message, 'l-warn');
+  }
+  await checkWebGPU();
+
+  // ── Transformers.js dynamic import ──
+  let pipeline, env, generator;
+  async function loadTransformers() {
+    if (pipeline) return;
+    log('Loading Transformers.js from CDN...', 'l-info');
+    const mod = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2/dist/transformers.min.js');
+    pipeline = mod.pipeline;
+    env = mod.env;
+    env.allowLocalModels = false;
+    env.useBrowserCache = true;
+    log('Transformers.js loaded.', 'l-ok');
+  }
+
+  // Fallback chain: if a model fails (gated, too large, network error) try the next smaller one
+  const MODEL_FALLBACK_CHAIN = [
+    'HuggingFaceTB/SmolLM2-135M-Instruct',
+    'HuggingFaceTB/SmolLM2-360M-Instruct',
+    'onnx-community/Qwen2.5-0.5B-Instruct',
+  ];
+
+  async function loadModelById(modelId, dtype) {
+    await loadTransformers();
+    log(`Loading model ${modelId} (device: ${useDevice}, dtype: ${dtype})...`, 'l-info');
+    $('stState').textContent = 'loading';
+    setDot('dotStatus', 'warn');
+    const t0 = performance.now();
+    generator = await pipeline('text-generation', modelId, {
+      device: useDevice,
+      dtype: dtype,
+      progress_callback: (p) => {
+        if (p.status === 'progress' && p.file && p.progress) {
+          if (Math.random() < 0.05) {
+            log(`  ${p.file}: ${p.progress.toFixed(1)}%`, 'l-mut');
+          }
+        } else if (p.status === 'ready') {
+          log(`  ready: ${p.task || ''}`, 'l-ok');
+        }
+      },
+    });
+    const dt = ((performance.now() - t0) / 1000).toFixed(1);
+    log(`Model loaded in ${dt}s.`, 'l-ok');
+    return dt;
+  }
+
+  async function loadModel(modelId) {
+    const selectedOpt = $('model').selectedOptions[0];
+    const preferredDtype = (selectedOpt && selectedOpt.dataset.dtype) || (useDevice === 'webgpu' ? 'q4' : 'q8');
+
+    // Try requested model first
+    try {
+      await loadModelById(modelId, preferredDtype);
+      $('stModel').textContent = modelId.split('/').pop().split('-').slice(0,2).join('-');
+      $('stState').textContent = 'ready';
+      setDot('dotStatus', 'live');
+      return;
+    } catch (e) {
+      const isGated = /401|403|Unauthorized|gated|access/i.test(e.message);
+      const reason = isGated ? 'gated/unauthorized' : e.message;
+      log(`  Model ${modelId} failed (${reason}) — trying fallback chain`, 'l-warn');
+      // Clear bad model from localStorage so it doesn't persist
+      try { const s = JSON.parse(localStorage.getItem('myai_agent') || '{}'); if (s.model === modelId) { delete s.model; localStorage.setItem('myai_agent', JSON.stringify(s)); } } catch (_) {}
+    }
+
+    // Walk fallback chain, skipping the model we already tried
+    for (const fallback of MODEL_FALLBACK_CHAIN) {
+      if (fallback === modelId) continue;
+      try {
+        log(`  Trying fallback: ${fallback}`, 'l-mut');
+        // Update dropdown to match
+        const opts = Array.from($('model').options);
+        const match = opts.find(o => o.value === fallback);
+        if (match) $('model').value = fallback;
+        const fallbackDtype = (match && match.dataset.dtype) || 'q8';
+        await loadModelById(fallback, fallbackDtype);
+        $('stModel').textContent = fallback.split('/').pop().split('-').slice(0,2).join('-');
+        $('stState').textContent = 'ready';
+        setDot('dotStatus', 'live');
+        return;
+      } catch (fe) {
+        log(`  Fallback ${fallback} also failed: ${fe.message}`, 'l-warn');
+      }
+    }
+
+    // All models failed
+    throw new Error('All models failed to load. Check network or try a smaller model.');
+  }
+
+  // ── HTTP helper ──
+  async function http(method, url, body, timeoutMs = 30000) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const r = await fetch(url, {
+        method,
+        headers: body ? { 'Content-Type': 'application/json' } : {},
+        body: body ? JSON.stringify(body) : undefined,
+        signal: ctrl.signal,
+      });
+      const text = await r.text();
+      let json = null;
+      try { json = text ? JSON.parse(text) : null; } catch (_) { json = { _raw: text }; }
+      return { status: r.status, ok: r.ok, body: json };
+    } catch (e) {
+      return { status: 0, ok: false, body: { _err: e.message } };
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
+  // ── Coordinator I/O (mirrors myai-agent.py contract) ──
+  function coord() { return $('coordUrl').value.replace(/\/+$/, ''); }
+
+  function buildRegisterPayload() {
+    const modelId = $('model').value;
+    const info = gpuAdapter?.info || {};
+    return {
+      agent_id:        AGENT_ID,
+      agent_name:      $('name').value || ('browser-' + AGENT_ID.slice(8, 16)),
+      version:         '0.2.0-browser',
+      platform:        'browser-webgpu',
+      device_fingerprint:      DEVICE_FINGERPRINT,
+      attestation_pubkey_b64:  ATTEST_PUB_B64,
+      ollama_url:      null,
+      vllm_url:        null,
+      vllm_healthy:    false,
+      vllm_models:     [],
+      gpus:            [{
+        name:         info.description || info.device || 'WebGPU',
+        vendor:       info.vendor || 'unknown',
+        architecture: info.architecture || 'unknown',
+        memory_free_mb: 0,
+        backend:      'webgpu',
+      }],
+      models:                       [modelId],
+      wallet_address:               $('wallet').value || null,
+      price_per_hour_myai:          0.25,
+      tensor_parallel_supported:    false,
+      max_tp_size:                  1,
+      pipeline_supported:           false,
+      backend_kind:                 'transformersjs-webgpu',
+    };
+  }
+
+  async function register() {
+    const payload = buildRegisterPayload();
+    log(`Registering as "${payload.agent_name}" (${AGENT_ID}) ...`, 'l-info');
+    const r = await http('POST', `${coord()}/api/v1/agents/register`, payload, 15000);
+    if (r.ok && (r.body?.success || r.body?.agent_id)) {
+      log(`  registered (HTTP ${r.status})`, 'l-ok');
+      return true;
+    }
+    // Agent UUID already has a secret in the coordinator — browser can't satisfy HMAC.
+    // Generate a fresh UUID and retry once so the user doesn't get stuck in offline mode.
+    if (r.body?.error?.code === 'HMAC_REQUIRED' || /hmac_required/i.test(JSON.stringify(r.body))) {
+      log(`  Agent ID has a stored secret — generating fresh ID and retrying…`, 'l-mut');
+      AGENT_ID = 'browser-' + crypto.randomUUID();
+      localStorage.setItem(AGENT_ID_KEY, AGENT_ID);
+      const payload2 = buildRegisterPayload();
+      const r2 = await http('POST', `${coord()}/api/v1/agents/register`, payload2, 15000);
+      if (r2.ok && (r2.body?.success || r2.body?.agent_id)) {
+        log(`  registered with new ID (${AGENT_ID})`, 'l-ok');
+        return true;
+      }
+      log(`  retry register HTTP ${r2.status}: ${JSON.stringify(r2.body).slice(0,200)}`, 'l-warn');
+      return false;
+    }
+    if (r.status === 409) {
+      log('  REJECTED: this device is already associated with a different wallet.', 'l-err');
+      log('  Either use the wallet originally registered, or clear browser data to start fresh.', 'l-warn');
+    } else if (r.status === 429) {
+      log('  REJECTED: per-wallet browser-agent cap reached. Unlink one before adding another.', 'l-err');
+    } else {
+      log(`  register HTTP ${r.status}: ${JSON.stringify(r.body).slice(0,200)}`, 'l-warn');
+      log(`  note: if coordinator does not yet support browser-webgpu agents, that's expected.`, 'l-mut');
+    }
+    return false;
+  }
+
+  async function heartbeat() {
+    const body = {
+      status: 'online',
+      gpus: buildRegisterPayload().gpus,
+      vllm_url: null,
+      vllm_healthy: false,
+      vllm_models: [],
+      models: [$('model').value],
+      tensor_parallel_supported: false,
+      max_tp_size: 1,
+      pipeline_supported: false,
+      backend_kind: 'transformersjs-webgpu',
+    };
+    if (ATTEST_PRIV) {
+      try { Object.assign(body, await signAttestation(ATTEST_PRIV, AGENT_ID)); }
+      catch (e) { log('attestation sign error on heartbeat: ' + e.message, 'l-warn'); }
+    }
+    const r = await http('POST', `${coord()}/api/v1/agents/${AGENT_ID}/heartbeat`, body, 10000);
+    if (r.status === 401) {
+      log('attestation rejected by coordinator — see server logs', 'l-err');
+    }
+    return r.ok;
+  }
+
+  async function pollOnce() {
+    const r = await http('GET', `${coord()}/api/v1/agents/${AGENT_ID}/jobs/pending`, null, 10000);
+    if (!r.ok) return [];
+    const jobs = r.body?.data?.jobs || r.body?.jobs || [];
+    return Array.isArray(jobs) ? jobs : [];
+  }
+
+  async function completeJob(jobId, result, success = true) {
+    const url = `${coord()}/api/v1/agents/${AGENT_ID}/jobs/${jobId}/complete`;
+    const body = { success, result };
+    if (ATTEST_PRIV) {
+      try { Object.assign(body, await signAttestation(ATTEST_PRIV, AGENT_ID)); }
+      catch (e) { log('attestation sign error on complete: ' + e.message, 'l-warn'); }
+    }
+    await http('POST', url, body, 15000);
+  }
+
+  // ── inference ──
+  let totalTokens = 0;
+  let totalJobs = 0;
+
+  function tryParseMessages(prompt) {
+    if (typeof prompt !== 'string') return null;
+    const s = prompt.trim();
+    if (!s.startsWith('[')) return null;
+    try { return JSON.parse(s); } catch (_) { return null; }
+  }
+
+  async function runInference(prompt, maxNewTokens = 256) {
+    const msgs = tryParseMessages(prompt);
+    if (msgs) {
+      const out = await generator(msgs, { max_new_tokens: maxNewTokens, do_sample: false });
+      const text = out?.[0]?.generated_text;
+      if (Array.isArray(text)) {
+        const last = text[text.length - 1];
+        return typeof last === 'string' ? last : (last?.content || JSON.stringify(last));
+      }
+      return typeof text === 'string' ? text : JSON.stringify(out);
+    }
+    const out = await generator(prompt, { max_new_tokens: maxNewTokens, do_sample: false });
+    const text = out?.[0]?.generated_text || '';
+    return typeof text === 'string' ? text.slice(prompt.length).trim() : JSON.stringify(out);
+  }
+
+  async function processJob(job) {
+    const jobId = job.job_id || job.id || 'unknown';
+    const prompt = job.prompt || '';
+    log(`job ${jobId} -- model=${job.model || '?'} prompt=${(prompt+'').slice(0,60).replace(/\n/g,' ')}...`, 'l-info');
+    if (!prompt) {
+      await completeJob(jobId, '', false);
+      return;
+    }
+    try {
+      const t0 = performance.now();
+      const result = await runInference(prompt, Math.min(job.max_tokens || 256, 512));
+      const dt = ((performance.now() - t0) / 1000).toFixed(2);
+      const approxTok = Math.max(1, Math.round(result.length / 4));
+      totalTokens += approxTok;
+      totalJobs += 1;
+      $('stJobs').textContent = totalJobs;
+      $('stTok').textContent = totalTokens;
+      $('stEarn').textContent = (totalJobs * 0.0001).toFixed(4);
+      log(`  done ${dt}s, ~${approxTok} tok`, 'l-ok');
+      await completeJob(jobId, result, true);
+    } catch (e) {
+      log(`  job error: ${e.message}`, 'l-err');
+      await completeJob(jobId, `browser-agent-error: ${e.message}`, false);
+    }
+  }
+
+  // ── main loop ──
+  let running = false;
+  let pollTimer = null, hbTimer = null, uptimeTimer = null;
+  let startedAt = 0;
+  let earningsTimer = null;
+
+  // Fetches /api/v1/agents/{id}/earnings and updates the right-rail stats.
+  // Quietly no-ops if the coordinator doesn't yet expose the endpoint (404).
+  async function refreshEarnings() {
+    if (!AGENT_ID) return;
+    const r = await http('GET', `${coord()}/api/v1/agents/${AGENT_ID}/earnings`, null, 8000);
+    if (!r.ok || !r.body) return;
+    const data = r.body.data || r.body;
+    if (typeof data !== 'object' || data === null) return;
+    const daily = Number(data.daily_myai || 0);
+    const life  = Number(data.lifetime_myai || 0);
+    const jobs  = Number(data.jobs_completed || 0);
+    const thr   = !!data.throttled;
+    $('stEarn').textContent = life.toFixed(2);
+    $('stJobs').textContent = String(jobs);
+    if (document.getElementById('stEarnDaily')) {
+      document.getElementById('stEarnDaily').textContent = daily.toFixed(2);
+      document.getElementById('stEarnLife').textContent  = life.toFixed(2);
+    }
+    // Flip the banner once we've actually earned something — keep BETA badge.
+    if (life > 0) {
+      const ph  = document.getElementById('placeholderNote');
+      const liv = document.getElementById('payoutLive');
+      if (ph)  ph.style.display  = 'none';
+      if (liv) liv.style.display = 'inline';
+    }
+    const tn = document.getElementById('throttleNote');
+    if (tn) tn.style.display = thr ? 'inline' : 'none';
+  }
+
+  async function start() {
+    if (running) return;
+    persist();
+    if (!webgpuOK && !wasmOK && !(await checkBackend())) return;
+    $('startBtn').disabled = true;
+    setDot('dotAgent', 'warn');
+    try {
+      await loadModel($('model').value);
+    } catch (e) {
+      log('Model load failed: ' + e.message, 'l-err');
+      $('startBtn').disabled = false;
+      setDot('dotAgent', 'bad');
+      $('stState').textContent = 'error';
+      return;
+    }
+    const ok = await register();
+    if (!ok) {
+      log('Continuing in solo / offline mode -- coordinator did not accept register.', 'l-warn');
+    }
+    running = true;
+    startedAt = Date.now();
+    setDot('dotAgent', 'live');
+    setDot('dotLog', 'live');
+    $('stopBtn').disabled = false;
+    $('stState').textContent = ok ? 'online' : 'offline';
+
+    uptimeTimer = setInterval(() => {
+      const s = Math.floor((Date.now() - startedAt) / 1000);
+      const m = Math.floor(s/60), h = Math.floor(m/60);
+      $('stUp').textContent = h ? `${h}h ${m%60}m` : (m ? `${m}m ${s%60}s` : `${s}s`);
+    }, 1000);
+
+    hbTimer = setInterval(async () => {
+      const ok = await heartbeat();
+      if (!ok) log('heartbeat failed', 'l-warn');
+    }, 30000);
+
+    // ── Real-earnings poller (2026-05-18, #8966 follow-up) ──
+    earningsTimer = setInterval(refreshEarnings, 30000);
+    // Fire one immediately so the UI updates without waiting 30s
+    refreshEarnings();
+
+    loop = async () => {
+      if (!running) return;
+      try {
+        const jobs = await pollOnce();
+        for (const j of jobs) {
+          if (!running) break;
+          await processJob(j);
+        }
+      } catch (e) {
+        log('poll error: ' + e.message, 'l-warn');
+      }
+      pollTimer = setTimeout(loop, 5000);
+    };
+    loop();
+    log('Agent running. Polling every 5s. Heartbeat every 30s.', 'l-ok');
+    // Prevent iOS from suspending the tab while the agent is active
+    await acquireWakeLock();
+  }
+
+  function stop() {
+    running = false;
+    if (pollTimer) clearTimeout(pollTimer);
+    if (hbTimer)   clearInterval(hbTimer);
+    if (uptimeTimer) clearInterval(uptimeTimer);
+    if (earningsTimer) clearInterval(earningsTimer);
+    pollTimer = null;
+    if (wakeLock && !wakeLock.released) wakeLock.release().catch(() => {});
+    wakeLock = null;
+    $('stopBtn').disabled = true;
+    $('startBtn').disabled = false;
+    $('stState').textContent = 'stopped';
+    setDot('dotAgent', '');
+    setDot('dotLog', '');
+    setDot('dotStatus', '');
+    log('Agent stopped.', 'l-warn');
+  }
+
+  $('startBtn').addEventListener('click', start);
+  $('stopBtn').addEventListener('click', stop);
+  window.addEventListener('beforeunload', () => { if (running) stop(); });
+
+  // ── iOS tab-survival: wake lock + visibility + freeze/resume ──────────────
+  let wakeLock = null;
+
+  async function acquireWakeLock() {
+    if (!('wakeLock' in navigator)) return;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      log('Screen wake lock acquired (prevents iOS from killing tab).', 'l-mut');
+      wakeLock.addEventListener('release', () => {
+        log('Wake lock released — will re-acquire when tab is visible.', 'l-mut');
+      });
+    } catch (e) {
+      log('Wake lock unavailable: ' + e.message, 'l-mut');
+    }
+  }
+
+  // Re-acquire wake lock and restart poll loop when tab comes back to foreground
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible') {
+      if (running) {
+        log('Tab visible again — checking poll loop...', 'l-mut');
+        // Restart poll loop if it died while backgrounded
+        if (!pollTimer) {
+          log('Poll loop was stopped — restarting.', 'l-warn');
+          pollTimer = setTimeout(loop, 100);
+        }
+        // Re-acquire wake lock (iOS releases it on hide)
+        if (wakeLock === null || wakeLock.released) {
+          await acquireWakeLock();
+        }
+      }
+    }
+  });
+
+  // Page Lifecycle API: Chrome on iOS fires freeze/resume
+  window.addEventListener('freeze', () => {
+    log('Page frozen by browser (backgrounded) — poll loop paused.', 'l-mut');
+  });
+  window.addEventListener('resume', () => {
+    if (running) {
+      log('Page resumed — restarting poll loop.', 'l-mut');
+      if (!pollTimer) pollTimer = setTimeout(loop, 100);
+    }
+  });
+
+  // Expose loop so visibilitychange handler can reference it
+  // (loop is declared inside start() — hoist a ref here)
+  let loop = null;
+
+  log('Browser agent ready. Set wallet + display name, then click Start.', 'l-info');
+  log(`Agent ID: ${AGENT_ID}`, 'l-mut');
+</script>
+
+</body>
+</html>
