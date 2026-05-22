@@ -401,27 +401,40 @@
 
 // ─── 1. Imports + globals ──────────────────────────────────────────────────
 
-const TJS_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/[email protected]/dist/transformers.min.js';
-let tjs = null; // lazily loaded transformers module
+// Multi-CDN ESM endpoints — both verified to expose `pipeline` 2026-05-22
+const TJS_URLS = [
+  'https://cdn.jsdelivr.net/npm/@huggingface/transformers@latest',
+  'https://esm.sh/@huggingface/transformers',
+  'https://cdn.jsdelivr.net/npm/@xenova/[email protected]', // legacy fallback
+];
+let tjs = null;
 let tjsLoading = null;
 async function ensureTransformers() {
   if (tjs) return tjs;
   if (!tjsLoading) {
     tjsLoading = (async () => {
-      try {
-        tjs = await import(TJS_URL);
-        if (tjs.env) {
-          tjs.env.allowLocalModels = false;
-          tjs.env.useBrowserCache = true;
-          tjs.env.useFSCache = true;
+      let lastErr = null;
+      for (const url of TJS_URLS) {
+        try {
+          log(`loading transformers.js from ${new URL(url).hostname}…`, 'mut');
+          tjs = await import(url);
+          if (!tjs?.pipeline) { lastErr = new Error('no pipeline export'); tjs = null; continue; }
+          if (tjs.env) {
+            tjs.env.allowLocalModels = false;
+            tjs.env.useBrowserCache = true;
+            tjs.env.useFSCache = true;
+          }
+          log('✓ transformers.js loaded from ' + new URL(url).hostname, 'ok');
+          return tjs;
+        } catch (e) {
+          lastErr = e;
+          log(`load failed from ${new URL(url).hostname}: ${e.message}`, 'warn');
         }
-        log('transformers.js loaded', 'ok');
-      } catch (e) {
-        log('failed to load transformers.js: ' + e.message, 'err');
-        tjsLoading = null;
-        throw e;
       }
-      return tjs;
+      tjsLoading = null;
+      const msg = lastErr ? lastErr.message : 'all CDNs failed';
+      log('all transformers.js CDNs failed: ' + msg, 'err');
+      throw new Error(msg);
     })();
   }
   return tjsLoading;
