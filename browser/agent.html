@@ -232,8 +232,8 @@
         <h3><span id="dotChat" class="dot"></span>Chat with your agent <span id="modelBadge" class="pill" style="margin-left:auto;">no model loaded</span></h3>
         <div id="chat"></div>
         <div class="chat-input-row">
-          <input id="chatInput" placeholder="Ask anything…" disabled />
-          <button id="sendBtn" disabled>Send</button>
+          <input id="chatInput" placeholder="Ask anything (model loads on first message)…" />
+          <button id="sendBtn">Send</button>
         </div>
       </div>
 
@@ -698,20 +698,33 @@ async function loadLocalModel(modelId, dtype = 'q4', task = 'text-generation') {
   }
 }
 
+let _textModelLoading = null;
 async function ensureTextModel() {
   if (STATE.modelPipeline) return STATE.modelPipeline;
-  const sel = document.getElementById('modelSel');
-  const modelId = sel.value;
-  const dtype = sel.options[sel.selectedIndex].dataset.dtype || 'q4';
-  STATE.modelId = modelId;
-  document.getElementById('modelBadge').textContent = 'loading: ' + modelId.split('/').pop();
-  STATE.modelPipeline = await loadLocalModel(modelId, dtype, 'text-generation');
-  document.getElementById('modelBadge').textContent = modelId.split('/').pop();
-  document.getElementById('chatInput').disabled = false;
-  document.getElementById('sendBtn').disabled = false;
-  document.getElementById('dotChat').className = 'dot on';
-  await dbSet('state', 'modelId', modelId);
-  return STATE.modelPipeline;
+  if (_textModelLoading) return _textModelLoading;
+  _textModelLoading = (async () => {
+    const sel = document.getElementById('modelSel');
+    const modelId = sel.value;
+    const dtype = sel.options[sel.selectedIndex].dataset.dtype || 'q4';
+    STATE.modelId = modelId;
+    document.getElementById('modelBadge').textContent = 'loading: ' + modelId.split('/').pop();
+    document.getElementById('dotChat').className = 'dot warn';
+    pushMsg('sys', `Loading ${modelId.split('/').pop()} on your device… first run downloads model weights (~few hundred MB up to ~2 GB depending on choice).`);
+    try {
+      STATE.modelPipeline = await loadLocalModel(modelId, dtype, 'text-generation');
+      document.getElementById('modelBadge').textContent = modelId.split('/').pop();
+      document.getElementById('dotChat').className = 'dot on';
+      await dbSet('state', 'modelId', modelId);
+      return STATE.modelPipeline;
+    } catch (e) {
+      document.getElementById('modelBadge').textContent = 'load failed';
+      document.getElementById('dotChat').className = 'dot bad';
+      throw e;
+    } finally {
+      _textModelLoading = null;
+    }
+  })();
+  return _textModelLoading;
 }
 
 async function ensureEmbedder() {
