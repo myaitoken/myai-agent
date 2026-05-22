@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MyAI Browser Agent — Run a Node in Your Tab (WebGPU)</title>
-  <meta name="description" content="Join the MyAI decentralized GPU compute network from your browser. No install. WebGPU inference. Earn MYAI tokens for jobs you serve." />
+  <meta name="description" content="Join the MyAI decentralized GPU compute network from your browser. Personal AI agent + earn MYAI by serving jobs. No install. WebGPU inference." />
   <meta property="og:title" content="MyAI Browser Agent — WebGPU" />
-  <meta property="og:description" content="Open a tab. Run a node. Earn MYAI. No install required." />
+  <meta property="og:description" content="Your personal AI agent in a browser tab. Chats with you locally. Earns MYAI when idle." />
   <meta property="og:url" content="https://agent.myaitoken.io" />
   <meta property="og:type" content="website" />
   <meta property="og:image" content="https://myaitoken.io/og-image.png" />
@@ -20,10 +20,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="MyAI Agent" />
-  <!-- Coinbase Wallet SDK v4 — Smart Wallet (passkey, no seed phrase) on Base -->
+
+  <!-- Coinbase Wallet SDK v4 -->
   <script src="https://cdn.jsdelivr.net/npm/@coinbase/wallet-sdk@4/dist/browser.js"></script>
 
-  <!-- Google Analytics GA4 (same as parent site) -->
+  <!-- Google Analytics GA4 -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-YEB23ZXXBQ"></script>
   <script>
     window.dataLayer = window.dataLayer || [];
@@ -45,11 +46,13 @@
       --border:    #1e293b;
       --border-2:  #2a3a5e;
       --text:      #e2e8f0;
+      --fg:        #e2e8f0;
       --muted:     #94a3b8;
       --dim:       #64748b;
       --brand:     #8b5cf6;
       --brand-2:   #6366f1;
       --brand-3:   #22d3ee;
+      --accent:    #22d3ee;
       --good:      #10b981;
       --warn:      #f59e0b;
       --bad:       #ef4444;
@@ -81,181 +84,112 @@
       height: 60px; display: flex; align-items: center; justify-content: space-between;
     }
     .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); font-weight: 700; }
-    .logo-mark {
-      width: 32px; height: 32px; border-radius: 8px;
-      background: var(--grad);
-      display: grid; place-items: center;
-      color: white; font-weight: 800; font-size: 14px;
-    }
+    .logo-mark { width: 32px; height: 32px; border-radius: 8px; background: var(--grad); display: grid; place-items: center; color: white; font-weight: 800; font-size: 14px; }
     .nav-links { display: flex; gap: 1.5rem; align-items: center; }
     .nav-links a { color: var(--muted); text-decoration: none; font-size: 14px; }
     .nav-links a:hover { color: var(--text); }
-    #installBtn {
-      display: none; /* shown by JS when install prompt is available */
-      align-items: center; gap: 6px;
-      padding: 6px 14px; border-radius: 8px;
-      background: linear-gradient(135deg, #8b5cf6, #22d3ee);
-      border: none; color: white; font-size: 13px; font-weight: 600;
-      cursor: pointer; white-space: nowrap;
-    }
-    #installBtn:hover { opacity: 0.9; }
+    #installBtn { display: none; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 8px; background: linear-gradient(135deg, #8b5cf6, #22d3ee); border: none; color: white; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 
     /* ── LAYOUT ── */
-    .wrap { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
-    h1 { font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 800; letter-spacing: -0.02em; line-height: 1.15; }
-    h1 .grad {
-      background: var(--grad);
-      background-clip: text;
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    .lede { color: var(--muted); margin-top: 0.75rem; font-size: 1.05rem; max-width: 700px; }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+    h1 { font-size: clamp(1.5rem, 3vw, 2.25rem); font-weight: 800; line-height: 1.2; margin-bottom: 0.5rem; }
+    .grad { background: var(--grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .lede { color: var(--muted); font-size: 0.98rem; max-width: 760px; margin-bottom: 1rem; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 600; background: rgba(139, 92, 246, 0.15); color: #c4b5fd; border: 1px solid rgba(139, 92, 246, 0.3); vertical-align: middle; margin-left: 6px; }
+    .pill.beta { background: rgba(245, 158, 11, 0.15); color: #fcd34d; border-color: rgba(245, 158, 11, 0.3); }
 
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr 360px;
-      gap: 1.5rem;
-      margin-top: 2rem;
-    }
-    @media (max-width: 880px) { .grid { grid-template-columns: 1fr; } }
+    /* ── banner ── */
+    .banner { padding: 0.75rem 1rem; border-radius: 10px; font-size: 0.88rem; margin-bottom: 1rem; border: 1px solid var(--border-2); }
+    .banner.good { background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.3); color: #6ee7b7; }
+    .banner.bad  { background: rgba(239, 68, 68, 0.08); border-color: rgba(239, 68, 68, 0.3); color: #fca5a5; }
+    .banner.warn { background: rgba(245, 158, 11, 0.08); border-color: rgba(245, 158, 11, 0.3); color: #fcd34d; }
 
-    .card {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 1.25rem;
-    }
-    .card h3 {
-      font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em;
-      color: var(--muted); font-weight: 600; margin-bottom: 1rem;
-    }
-    .card h3 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--dim); vertical-align: middle; }
-    .card h3 .dot.live { background: var(--good); box-shadow: 0 0 8px rgba(16, 185, 129, 0.6); animation: pulse 2s infinite; }
-    .card h3 .dot.warn { background: var(--warn); }
-    .card h3 .dot.bad { background: var(--bad); }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    /* ── grid ── */
+    .grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 1rem; margin-top: 1rem; }
+    @media (max-width: 920px) { .grid { grid-template-columns: 1fr; } }
 
-    /* ── form ── */
-    label { display: block; font-size: 0.78rem; color: var(--muted); margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.04em; }
-    input, select {
-      width: 100%; padding: 0.6rem 0.75rem;
-      background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 8px;
-      color: var(--text); font-family: inherit; font-size: 0.92rem;
-      transition: border-color 0.15s;
-    }
-    input:focus, select:focus { outline: none; border-color: var(--brand); }
-    .field { margin-bottom: 1rem; }
-    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    /* ── card ── */
+    .card { background: var(--panel); border: 1px solid var(--border); padding: 1.25rem; border-radius: 12px; }
+    .card h3 { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 8px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
+    .dot.on { background: var(--good); box-shadow: 0 0 8px rgba(16, 185, 129, 0.5); }
+    .dot.warn { background: var(--warn); }
+    .dot.bad { background: var(--bad); }
+    .card + .card { margin-top: 1rem; }
 
-    button {
-      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-      padding: 0.75rem 1.5rem;
-      background: var(--grad);
-      color: white; border: none; border-radius: 8px;
-      font-family: inherit; font-weight: 600; font-size: 0.95rem;
-      cursor: pointer;
-      transition: transform 0.1s, opacity 0.15s;
-      width: 100%;
-    }
-    button:hover:not(:disabled) { transform: translateY(-1px); }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    button.danger { background: linear-gradient(135deg, #ef4444 0%, #f59e0b 100%); }
-    button.ghost { background: transparent; border: 1px solid var(--border-2); color: var(--text); }
-    button.sm { padding: 0.45rem 0.9rem; font-size: 0.82rem; width: auto; }
-    #benchBtn { background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%); width: auto; padding: 0.6rem 1rem; font-size: 0.85rem; }
-    #benchBtn.running { opacity: 0.6; cursor: wait; }
-    .bench-row { display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0; border-bottom: 1px solid var(--border); font-size: 0.82rem; }
-    .bench-row:last-child { border-bottom: none; }
-    .bench-badge { padding: 2px 7px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; }
-    .bench-best { background: #10b981; color: #fff; }
-    .bench-ok   { background: #3b82f6; color: #fff; }
-    .bench-slow { background: #f59e0b; color: #000; }
-    .bench-oom  { background: #ef4444; color: #fff; }
+    /* ── chat ── */
+    #chat { background: var(--bg-2); border-radius: 8px; padding: 0.75rem; height: 380px; overflow-y: auto; border: 1px solid var(--border); margin-bottom: 0.75rem; font-size: 0.92rem; }
+    .msg { margin-bottom: 0.75rem; display: flex; flex-direction: column; gap: 4px; }
+    .msg .meta { font-size: 0.7rem; color: var(--dim); display: flex; align-items: center; gap: 6px; }
+    .msg .tier-badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: 600; }
+    .tier-local { background: rgba(34, 211, 238, 0.15); color: #67e8f9; }
+    .tier-edge { background: rgba(139, 92, 246, 0.15); color: #c4b5fd; }
+    .tier-datacenter { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
+    .msg .bubble { padding: 8px 12px; border-radius: 8px; line-height: 1.5; }
+    .msg.user .bubble { background: var(--panel-2); align-self: flex-end; max-width: 85%; }
+    .msg.user { align-items: flex-end; }
+    .msg.agent .bubble { background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.2); }
+    .msg.sys .bubble { background: rgba(100, 116, 139, 0.1); color: var(--muted); font-size: 0.85rem; font-style: italic; }
 
-    /* ── easy-setup card ── */
-    .setup-card {
-      background: linear-gradient(135deg, rgba(139,92,246,0.08), rgba(34,211,238,0.05));
-      border: 1px solid rgba(139,92,246,0.25);
-      border-radius: 12px; padding: 1.1rem 1.2rem; margin-bottom: 1rem;
+    .chat-input-row { display: flex; gap: 8px; }
+    .chat-input-row input { flex: 1; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-2); color: var(--text); font-family: inherit; font-size: 0.92rem; }
+    .chat-input-row input:focus { outline: none; border-color: var(--brand); }
+    .chat-input-row button { padding: 0 16px; border-radius: 8px; border: none; background: var(--grad); color: white; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
+    .chat-input-row button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── field ── */
+    .field { display: block; margin-bottom: 0.75rem; }
+    .field label { display: block; font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.3rem; font-weight: 600; }
+    .field input, .field select { width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-2); color: var(--text); font-family: inherit; font-size: 0.88rem; }
+    .field input:focus, .field select:focus { outline: none; border-color: var(--brand); }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+    /* ── buttons ── */
+    button.sm, button.ghost, button.danger {
+      width: 100%; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--bg-2); color: var(--text); font-family: inherit; font-weight: 600; cursor: pointer;
+      font-size: 0.85rem; transition: all 0.15s;
     }
-    .setup-card .sc-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 0.2rem; }
-    .setup-card .sc-sub  { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.8rem; }
-    .setup-card input { font-size: 0.9rem; }
-    .addr-display {
-      font-family: 'JetBrains Mono', monospace; font-size: 0.78rem;
-      color: var(--brand-3); word-break: break-all;
-      background: var(--bg-2); border: 1px solid var(--border);
-      border-radius: 8px; padding: 0.5rem 0.75rem; margin: 0.5rem 0;
-    }
-    .setup-managed {
-      font-size: 0.78rem; color: var(--muted);
-      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-    }
+    button.sm:hover, button.ghost:hover { border-color: var(--brand); }
+    button.danger { border-color: rgba(239, 68, 68, 0.3); color: #fca5a5; }
+    button.danger:hover { background: rgba(239, 68, 68, 0.1); }
+    button[disabled] { opacity: 0.5; cursor: not-allowed; }
 
     /* ── stats ── */
-    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
-    .stat {
-      background: var(--bg-2); border: 1px solid var(--border);
-      padding: 0.9rem; border-radius: 10px;
-    }
-    .stat .v { font-size: 1.5rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--text); }
-    .stat .l { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 0.2rem; }
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+    .stat { background: var(--bg-2); border: 1px solid var(--border); padding: 0.7rem; border-radius: 8px; }
+    .stat .v { font-size: 1.15rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+    .stat .l { font-size: 0.65rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 0.2rem; }
     .stat.acc .v { background: var(--grad); background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
 
     /* ── log ── */
-    #log {
-      background: #000; border-radius: 8px;
-      padding: 0.75rem; height: 280px; overflow-y: auto;
-      font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; line-height: 1.5;
-      color: #a0e8a0; border: 1px solid var(--border);
-    }
-    #log .line { margin-bottom: 2px; word-wrap: break-word; }
+    #log { background: #000; border-radius: 6px; padding: 0.6rem; height: 140px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; line-height: 1.4; color: #a0e8a0; border: 1px solid var(--border); }
+    #log .line { margin-bottom: 1px; word-wrap: break-word; }
     #log .l-err { color: #ff6b6b; }
     #log .l-warn { color: #ffd166; }
     #log .l-ok { color: #06d6a0; }
     #log .l-info { color: #61a0ff; }
     #log .l-mut { color: #6b7c93; }
 
-    /* ── webgpu banner ── */
-    .banner {
-      padding: 0.75rem 1rem; border-radius: 10px;
-      font-size: 0.88rem; margin-bottom: 1rem;
-      border: 1px solid var(--border-2);
-    }
-    .banner.good { background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.3); color: #6ee7b7; }
-    .banner.bad  { background: rgba(239, 68, 68, 0.08); border-color: rgba(239, 68, 68, 0.3); color: #fca5a5; }
-    .banner.warn { background: rgba(245, 158, 11, 0.08); border-color: rgba(245, 158, 11, 0.3); color: #fcd34d; }
+    /* ── caps + cap UI ── */
+    .cap-row { display: flex; align-items: center; gap: 8px; margin-bottom: 0.5rem; font-size: 0.85rem; }
+    .cap-row input[type=checkbox] { accent-color: var(--brand); }
+    .cap-row .cap-name { flex: 1; }
+    .cap-row .cap-status { font-size: 0.7rem; color: var(--muted); }
 
-    .pill {
-      display: inline-block; padding: 2px 8px; border-radius: 999px;
-      font-size: 0.7rem; font-weight: 600;
-      background: rgba(139, 92, 246, 0.15); color: #c4b5fd;
-      border: 1px solid rgba(139, 92, 246, 0.3);
-      vertical-align: middle; margin-left: 6px;
-    }
-    .pill.beta { background: rgba(245, 158, 11, 0.15); color: #fcd34d; border-color: rgba(245, 158, 11, 0.3); }
+    /* ── wallet display ── */
+    .addr { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: var(--accent); word-break: break-all; background: var(--bg-2); border: 1px solid var(--border); border-radius: 6px; padding: 0.45rem 0.6rem; }
 
-    /* ── how-it-works ── */
-    .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-top: 2.5rem; }
-    @media (max-width: 720px) { .steps { grid-template-columns: 1fr 1fr; } }
-    .step {
-      background: var(--panel); border: 1px solid var(--border);
-      padding: 1rem; border-radius: 12px;
-    }
-    .step .n {
-      width: 28px; height: 28px; border-radius: 50%;
-      background: var(--grad); display: grid; place-items: center;
-      color: white; font-weight: 700; font-size: 0.85rem; margin-bottom: 0.6rem;
-    }
-    .step .t { font-weight: 600; font-size: 0.95rem; margin-bottom: 0.3rem; }
-    .step .d { font-size: 0.82rem; color: var(--muted); }
-
-    footer {
-      margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
-      text-align: center; color: var(--dim); font-size: 0.8rem;
-    }
+    /* ── footer ── */
+    footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); text-align: center; color: var(--dim); font-size: 0.78rem; }
     footer a { color: var(--muted); text-decoration: none; }
     footer a:hover { color: var(--text); }
+
+    /* ── settings modal ── */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 200; display: none; align-items: center; justify-content: center; padding: 1rem; }
+    .modal-overlay.show { display: flex; }
+    .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; max-width: 500px; width: 100%; max-height: 90vh; overflow-y: auto; }
+    .modal h3 { margin-bottom: 1rem; }
 
     .small { font-size: 0.78rem; color: var(--muted); }
     code { font-family: 'JetBrains Mono', monospace; font-size: 0.85em; background: var(--bg-2); padding: 1px 5px; border-radius: 4px; }
@@ -273,223 +207,1131 @@
       <a href="https://myaitoken.io">Home</a>
       <a href="https://myaitoken.io/network">Network</a>
       <a href="https://myaitoken.io/docs">Docs</a>
-      <button id="installBtn" title="Install MyAI Agent as an app">
-        ↓ Install App
-      </button>
+      <button id="settingsBtn" class="sm" style="width:auto;padding:6px 12px;font-size:0.8rem;">⚙ Settings</button>
+      <button id="installBtn" title="Install MyAI Agent as an app">↓ Install</button>
     </div>
   </div>
 </nav>
 
 <div class="wrap">
 
-  <h1>Run a MyAI node in your <span class="grad">browser tab</span><span class="pill beta">BETA</span></h1>
+  <h1>Your personal AI agent in a <span class="grad">browser tab</span><span class="pill beta">BETA</span></h1>
   <p class="lede">
-    No install. No CLI. WebGPU inference runs in your tab, picks up jobs from the
-    MyAI coordinator, and earns MYAI tokens to your wallet address. Closing the tab
-    stops the node.
-  </p>
-  <p class="lede" style="font-size:0.97rem;color:var(--dim);margin-top:-0.5rem;margin-bottom:1.2rem">
-    <strong style="color:var(--fg)">Become a verifier for AI agents</strong> &mdash;
-    your phone or laptop earns MYAI scoring AI output for orchestrators worldwide.
-    <a href="/trust" style="color:var(--accent);text-decoration:underline;text-underline-offset:3px">How does this work? &rarr;</a>
+    Runs locally on your device's GPU. Chats with you privately. When it can't answer alone,
+    it pays the network in MYAI to get help from a bigger model. When idle, it earns MYAI
+    by helping other agents.
   </p>
 
-  <div id="gpuBanner" class="banner warn">Checking WebGPU support...</div>
+  <div id="gpuBanner" class="banner warn">Checking WebGPU support…</div>
 
   <div class="grid">
-    <!-- LEFT: settings + log -->
+
+    <!-- LEFT: chat -->
     <div>
       <div class="card">
-        <h3><span id="dotAgent" class="dot"></span>Agent Settings</h3>
-
-        <div class="field">
-          <label for="model">Model</label>
-          <select id="model">
-            <option value="HuggingFaceTB/SmolLM2-135M-Instruct" data-dtype="q8" data-size="~135MB" data-cpu-ok="1" selected>SmolLM2-135M (CPU-safe, ~135MB) ✦ iPhone/Console</option>
-            <option value="HuggingFaceTB/SmolLM2-360M-Instruct" data-dtype="q8" data-size="~280MB" data-cpu-ok="1">SmolLM2-360M (fast, ~280MB)</option>
-            <option value="onnx-community/Qwen2.5-0.5B-Instruct" data-dtype="q4" data-size="~500MB">Qwen2.5-0.5B (recommended, ~500MB)</option>
-            <option value="onnx-community/Qwen2.5-1.5B-Instruct-q4f16" data-dtype="q4f16" data-size="~1.1GB">Qwen2.5-1.5B (quality, ~1.1GB)</option>
-            <option value="onnx-community/Llama-3.2-1B-Instruct-q4f16" data-dtype="q4f16" data-size="~0.7GB">Llama-3.2-1B (quality, ~0.7GB)</option>
-          </select>
-        </div>
-
-        <!-- ── Easy setup for non-crypto users ── -->
-        <div id="setupCard" class="setup-card">
-          <div class="sc-title">⚡ New here? Create your earnings wallet</div>
-          <div class="sc-sub">No seed phrase. No app download. Just a passkey — secured the same way your phone unlocks.</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-            <button id="setupBtn" class="sm" style="width:auto;white-space:nowrap;background:var(--grad);color:#fff;border:none;">
-              🔵 Create Smart Wallet (free)
-            </button>
-            <span style="font-size:0.75rem;color:var(--dim);">Powered by Coinbase · Base network</span>
-          </div>
-          <div id="setupResult" style="display:none;margin-top:0.6rem;">
-            <div style="font-size:0.8rem;color:var(--good);font-weight:600;margin-bottom:2px;">
-              ✅ Wallet connected!
-            </div>
-            <div class="addr-display" id="setupAddrDisplay"></div>
-            <div class="setup-managed">
-              <span>🛡 Non-custodial · recoverable via passkey</span>
-              <span>·</span>
-              <a href="#" id="setupAdvanced" style="color:var(--dim);">I have my own wallet</a>
-            </div>
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="field">
-            <label for="name">Display name</label>
-            <input id="name" placeholder="browser-anon" />
-          </div>
-          <div class="field" id="walletField">
-            <label for="wallet">Earnings address</label>
-            <div style="display:flex;gap:6px;align-items:stretch;">
-              <input id="wallet" placeholder="0x..." style="flex:1;min-width:0;" />
-              <button id="pasteWalletBtn" class="ghost" title="Paste from clipboard"
-                style="width:auto;padding:0 10px;font-size:1rem;flex-shrink:0;">📋</button>
-              <button id="connectWalletBtn" class="ghost" title="Connect existing wallet (MetaMask / Coinbase / WalletConnect)"
-                style="width:auto;padding:0 10px;font-size:0.78rem;white-space:nowrap;flex-shrink:0;">Connect</button>
-            </div>
-            <div id="walletHint" style="font-size:0.73rem;color:var(--muted);margin-top:4px;display:none;"></div>
-          </div>
-        </div>
-
-        <div class="field">
-          <label for="coordUrl">Coordinator</label>
-          <input id="coordUrl" value="https://api.myaitoken.io" />
-        </div>
-
-        <div class="row">
-          <button id="startBtn">Start agent</button>
-          <button id="stopBtn" class="danger" disabled>Stop</button>
-          <button id="benchBtn" title="Benchmark all models on this device">⚡ Benchmark</button>
+        <h3><span id="dotChat" class="dot"></span>Chat with your agent <span id="modelBadge" class="pill" style="margin-left:auto;">no model loaded</span></h3>
+        <div id="chat"></div>
+        <div class="chat-input-row">
+          <input id="chatInput" placeholder="Ask anything…" disabled />
+          <button id="sendBtn" disabled>Send</button>
         </div>
       </div>
 
-      <div class="card" style="margin-top:1rem">
-        <h3><span id="dotLog" class="dot"></span>Agent log</h3>
+      <div class="card">
+        <h3><span id="dotLog" class="dot"></span>Agent activity</h3>
         <div id="log"></div>
       </div>
     </div>
 
-    <!-- RIGHT: stats -->
+    <!-- RIGHT: status + caps + wallet -->
     <div>
       <div class="card">
-        <h3><span id="dotStatus" class="dot"></span>Status</h3>
+        <h3><span id="dotEarn" class="dot"></span>Status</h3>
         <div class="stats">
-          <div class="stat"><div class="v" id="stModel">-</div><div class="l">Model</div></div>
           <div class="stat"><div class="v" id="stState">idle</div><div class="l">State</div></div>
-          <div class="stat"><div class="v" id="stJobs">0</div><div class="l">Jobs served</div></div>
-          <div class="stat"><div class="v" id="stTok">0</div><div class="l">Tokens out</div></div>
-          <div class="stat acc"><div class="v" id="stEarn">0.00</div><div class="l">MYAI earned*</div></div>
+          <div class="stat"><div class="v" id="stJobs">0</div><div class="l">Jobs done</div></div>
+          <div class="stat acc"><div class="v" id="stEarn">0.000</div><div class="l">MYAI earned</div></div>
+          <div class="stat"><div class="v" id="stSpent">0.000</div><div class="l">MYAI spent</div></div>
+          <div class="stat"><div class="v" id="stRep">—</div><div class="l">Reputation</div></div>
           <div class="stat"><div class="v" id="stUp">0s</div><div class="l">Uptime</div></div>
         </div>
-        <p id="earningsBanner" class="small" style="margin-top:0.8rem">
-          <span id="placeholderNote">
-            *Earnings are <strong>placeholder</strong> until the coordinator confirms browser-agent
-            payout. Your wallet is recorded on registration and will be credited
-            retroactively if the coordinator enables payouts for this agent type.
-          </span>
-          <span id="payoutLive" style="display:none">
-            <span class="badge" style="background:#0a3;color:#fff;padding:2px 6px;border-radius:4px">BETA</span>
-            Real payout enabled. Daily: <strong id="stEarnDaily">0.00</strong> MYAI
-            &middot; Lifetime: <strong id="stEarnLife">0.00</strong> MYAI
-            <span id="throttleNote" style="display:none;color:#a60">
-              &middot; throttled (wallet reached daily cap)
-            </span>
-          </span>
-        </p>
+        <div class="small" style="margin-top:0.6rem;">
+          Spent today: <strong id="spentToday">0.000</strong> / <strong id="dailyCapShow">1.00</strong> MYAI
+        </div>
       </div>
 
-      <div class="card" style="margin-top:1rem">
-        <h3>GPU info</h3>
-        <div id="gpuInfo" class="small">Run a check to populate.</div>
+      <div class="card">
+        <h3><span id="dotCaps" class="dot"></span>Earning capabilities</h3>
+        <div class="cap-row">
+          <input type="checkbox" id="capVerify" checked />
+          <span class="cap-name">Verifier swarm</span>
+          <span class="cap-status">small model judging</span>
+        </div>
+        <div class="cap-row">
+          <input type="checkbox" id="capEmbed" checked />
+          <span class="cap-name">Embeddings</span>
+          <span class="cap-status">bge-small</span>
+        </div>
+        <div class="cap-row">
+          <input type="checkbox" id="capClassify" checked />
+          <span class="cap-name">Classification</span>
+          <span class="cap-status">sentiment / intent / NSFW</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:0.6rem;">
+          <button id="startBtn" class="sm" style="background:var(--grad);color:white;border:none;">▶ Start earning</button>
+          <button id="stopBtn" class="danger" disabled>Stop</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3><span id="dotWallet" class="dot"></span>Wallet</h3>
+        <div id="walletEmpty">
+          <p class="small" style="margin-bottom:0.6rem;">No wallet yet. Earnings need somewhere to go.</p>
+          <button id="createWalletBtn" class="sm" style="background:var(--grad);color:white;border:none;">🔵 Create Smart Wallet (free)</button>
+          <p class="small" style="margin-top:0.5rem;">No seed phrase · passkey-secured · Base network</p>
+          <p class="small" style="margin-top:0.3rem;"><a href="#" id="useExistingWalletLink" style="color:var(--accent);">I have my own wallet</a></p>
+        </div>
+        <div id="walletConnected" style="display:none;">
+          <div class="addr" id="walletAddr"></div>
+          <div class="small" style="margin-top:0.4rem;display:flex;justify-content:space-between;">
+            <span>🛡 Non-custodial</span>
+            <a href="#" id="changeWalletLink" style="color:var(--dim);">change</a>
+          </div>
+        </div>
+        <div id="walletManualEntry" style="display:none;margin-top:0.5rem;">
+          <input id="manualWallet" placeholder="0x…" />
+          <div style="display:flex;gap:6px;margin-top:6px;">
+            <button id="useManualBtn" class="sm" style="background:var(--grad);color:white;border:none;">Use</button>
+            <button id="cancelManualBtn" class="ghost">Cancel</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
-
-  <!-- ── HOW IT WORKS ── -->
-  <div class="steps">
-    <div class="step">
-      <div class="n">1</div><div class="t">Browser checks WebGPU</div>
-      <div class="d">Chrome 113+ (or Edge) with hardware acceleration on.</div>
-    </div>
-    <div class="step">
-      <div class="n">2</div><div class="t">Model loads to GPU</div>
-      <div class="d">Via Transformers.js + ONNX Runtime Web. Cached locally on first run.</div>
-    </div>
-    <div class="step">
-      <div class="n">3</div><div class="t">Register + poll</div>
-      <div class="d">Heartbeat to <code>api.myaitoken.io</code>. Poll for pending jobs.</div>
-    </div>
-    <div class="step">
-      <div class="n">4</div><div class="t">Inference + payout</div>
-      <div class="d">Each completed job returns a result; the coordinator credits MYAI to your wallet.</div>
-    </div>
-  </div>
-
-
-  <!-- ── Qualified Verifier Models (#9051) ── -->
-  <div id="verifierPanel" style="margin:2rem 0 1.5rem;padding:1.25rem 1.5rem;background:rgba(0,255,163,.05);border:1px solid rgba(0,255,163,.2);border-radius:14px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
-      <div>
-        <div style="font-size:1rem;font-weight:700;color:var(--fg)">✅ Qualified Verifier Models</div>
-        <div style="font-size:0.8rem;color:var(--dim);margin-top:2px">Models approved for scoring AI output on the MyAI network</div>
-      </div>
-      <a href="/trust" style="font-size:0.8rem;color:var(--accent);text-decoration:underline;text-underline-offset:3px">What is a verifier? &rarr;</a>
-    </div>
-    <div id="verifierModelList" style="display:grid;gap:0.6rem">
-      <div style="color:var(--dim);font-size:0.85rem">Loading qualified models…</div>
-    </div>
-  </div>
-
-  <script>
-  (async function loadVerifierModels() {
-    const container = document.getElementById('verifierModelList');
-    if (!container) return;
-    try {
-      // Public read endpoint — falls back to curated static list if unavailable
-      const resp = await fetch('https://api.myaitoken.io/v1/admin/qualified-verifiers', {
-        headers: { 'Accept': 'application/json' }
-      }).catch(() => null);
-
-      let models = [];
-      if (resp && resp.ok) {
-        const data = await resp.json();
-        models = Array.isArray(data) ? data : (data.models || []);
-      }
-
-      // Static fallback list if endpoint unavailable
-      if (!models.length) {
-        models = [
-          { id: 'HuggingFaceTB/SmolLM2-135M-Instruct', name: 'SmolLM2-135M', dtype: 'q8', size: '~135MB', badge: 'CPU-safe' },
-          { id: 'onnx-community/Qwen2.5-0.5B-Instruct', name: 'Qwen2.5-0.5B', dtype: 'q4', size: '~500MB', badge: 'Recommended' },
-          { id: 'onnx-community/Qwen2.5-1.5B-Instruct-q4f16', name: 'Qwen2.5-1.5B', dtype: 'q4f16', size: '~1.1GB', badge: 'Quality' },
-        ];
-      }
-
-      container.innerHTML = models.map(m => {
-        const mid   = m.id   || m.model_id || '';
-        const mname = m.name || m.display_name || mid.split('/').pop() || mid;
-        const dtype = m.dtype || 'q4';
-        const size  = m.size  || '';
-        const badge = m.badge || m.tier || '';
-        return '<div style="display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0.75rem;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:8px;gap:10px;flex-wrap:wrap">' +
-          '<div style="display:flex;align-items:center;gap:8px;min-width:0">' +
-          (badge ? '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:rgba(0,255,163,.12);color:#00ffa3;white-space:nowrap">' + badge + '</span>' : '') +
-          '<span style="font-size:0.85rem;font-weight:600;color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + mname + '</span>' +
-          (size ? '<span style="font-size:0.75rem;color:var(--dim)">' + size + '</span>' : '') +
-          '</div>' +
-          '<button class="sm" style="white-space:nowrap;padding:4px 12px;font-size:0.8rem" onclick="loadModelById(' + JSON.stringify(mid) + ',' + JSON.stringify(dtype) + ')">Load &amp; verify</button>' +
-          '</div>';
-      }).join('');
-    } catch(e) {
-      container.innerHTML = '<div style="color:var(--dim);font-size:0.85rem">Could not load model list — select a model above to start verifying.</div>';
-    }
-  })();
-  </script>
 
   <footer>
-    Beta. WebGPU agent v0.1.0 &mdash;
-    <a href="https://myaitoken.io/network">network</a> &middot;
-    <a href="https://myaitoken.io/docs">doc--output truncated--
+    Beta · WebGPU agent v1.0 ·
+    <a href="https://myaitoken.io/network">network</a> ·
+    <a href="https://myaitoken.io/docs">docs</a> ·
+    <a href="/trust">trust</a>
+  </footer>
+</div>
+
+<!-- Settings modal -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <h3>Agent settings</h3>
+
+    <div class="field">
+      <label for="modelSel">Local model (used by your personal agent + verifier jobs)</label>
+      <select id="modelSel">
+        <option value="HuggingFaceTB/SmolLM2-135M-Instruct" data-dtype="q8" data-size="~135MB" data-cpu-ok="1">SmolLM2-135M — tiny, CPU-safe, iPhone/console</option>
+        <option value="HuggingFaceTB/SmolLM2-360M-Instruct" data-dtype="q8" data-size="~280MB" data-cpu-ok="1">SmolLM2-360M — fast, low quality</option>
+        <option value="onnx-community/Qwen2.5-0.5B-Instruct" data-dtype="q4" data-size="~500MB">Qwen2.5-0.5B — small, decent</option>
+        <option value="onnx-community/Qwen2.5-1.5B-Instruct" data-dtype="q4f16" data-size="~1.1GB" selected>Qwen2.5-1.5B — recommended default</option>
+        <option value="onnx-community/Llama-3.2-1B-Instruct-q4f16" data-dtype="q4f16" data-size="~0.7GB">Llama-3.2-1B — fast quality</option>
+        <option value="onnx-community/Llama-3.2-3B-Instruct" data-dtype="q4f16" data-size="~2.0GB">Llama-3.2-3B — high quality (≥6GB device)</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Display name (optional)</label>
+      <input id="displayNameInput" placeholder="browser-anon" />
+    </div>
+
+    <div class="field">
+      <label for="perQueryCap">Per-question escalation cap (MYAI)</label>
+      <input id="perQueryCap" type="number" step="0.01" min="0" value="0.10" />
+      <p class="small" style="margin-top:0.3rem;">Maximum MYAI your agent will spend escalating one question to a bigger model.</p>
+    </div>
+
+    <div class="field">
+      <label for="dailyCap">Daily escalation cap (MYAI)</label>
+      <input id="dailyCap" type="number" step="0.01" min="0" value="1.00" />
+      <p class="small" style="margin-top:0.3rem;">Maximum total MYAI you'll spend on escalations per 24 hours.</p>
+    </div>
+
+    <div class="field">
+      <label>Coordinator URL (advanced)</label>
+      <input id="coordUrl" value="https://api.myaitoken.io" />
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:1rem;">
+      <button id="saveSettingsBtn" class="sm" style="background:var(--grad);color:white;border:none;">Save</button>
+      <button id="closeSettingsBtn" class="ghost">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Verifier model list (kept from previous; rendered if API responds) -->
+<script>
+  (async function loadVerifierModels() {
+    try {
+      const resp = await fetch('https://api.myaitoken.io/v1/admin/qualified-verifiers', { headers: { 'Accept': 'application/json' } }).catch(() => null);
+      if (resp && resp.ok) {
+        const data = await resp.json();
+        window.__qualifiedVerifierModels = Array.isArray(data) ? data : (data.models || []);
+      }
+    } catch (_) { /* fallback ignored */ }
+  })();
+</script>
+
+<!-- ─── THE ENGINE ────────────────────────────────────────────────────────── -->
+<script type="module">
+'use strict';
+
+// ===========================================================================
+// MyAI Browser Agent v1 — single-file runtime
+// ===========================================================================
+//
+// Sections:
+//   1. Imports + globals
+//   2. Logging
+//   3. IndexedDB state
+//   4. Crypto primitives (attestation key, HMAC, fingerprint)
+//   5. Wallet (Coinbase Smart Wallet + manual)
+//   6. Transformers.js model loading
+//   7. Coordinator client (register, heartbeat, jobs)
+//   8. Job handlers (verify, embed, classify)
+//   9. Personal-agent chat loop (with budget-capped escalation)
+//  10. UI bindings
+//  11. Stability primitives
+//  12. Bootstrap
+// ===========================================================================
+
+// ─── 1. Imports + globals ──────────────────────────────────────────────────
+
+const TJS_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/[email protected]/dist/transformers.min.js';
+let tjs = null; // lazily loaded transformers module
+let tjsLoading = null;
+async function ensureTransformers() {
+  if (tjs) return tjs;
+  if (!tjsLoading) {
+    tjsLoading = (async () => {
+      try {
+        tjs = await import(TJS_URL);
+        if (tjs.env) {
+          tjs.env.allowLocalModels = false;
+          tjs.env.useBrowserCache = true;
+          tjs.env.useFSCache = true;
+        }
+        log('transformers.js loaded', 'ok');
+      } catch (e) {
+        log('failed to load transformers.js: ' + e.message, 'err');
+        tjsLoading = null;
+        throw e;
+      }
+      return tjs;
+    })();
+  }
+  return tjsLoading;
+}
+
+const STATE = {
+  agentId: null,
+  agentSecret: null,
+  walletAddress: null,
+  attestationKey: null,        // CryptoKeyPair for ECDSA
+  attestationPubJwk: null,     // exportable public JWK
+  deviceFingerprint: null,
+  modelId: null,
+  modelPipeline: null,         // text-generation pipeline
+  modelEmbedder: null,         // embedding pipeline (loaded on demand)
+  modelClassifier: null,       // classifier pipeline (loaded on demand)
+  workerActive: false,
+  capabilities: { verify: true, embed: true, classify: true },
+  coordinator: 'https://api.myaitoken.io',
+  perQueryCap: 0.10,
+  dailyCap: 1.00,
+  spentToday: 0.0,
+  spentTodayDay: null,
+  earned: 0.0,
+  jobsDone: 0,
+  reputation: null,
+  displayName: 'browser-anon',
+  startedAt: null,
+  chatHistory: [],
+  jobPollHandle: null,
+  heartbeatHandle: null,
+  audioCtx: null,
+};
+
+// ─── 2. Logging ────────────────────────────────────────────────────────────
+
+function log(msg, kind = 'info') {
+  const el = document.getElementById('log');
+  if (!el) { console.log(`[${kind}] ${msg}`); return; }
+  const div = document.createElement('div');
+  div.className = 'line l-' + kind;
+  const t = new Date().toLocaleTimeString();
+  div.textContent = `[${t}] ${msg}`;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+  // cap history
+  while (el.children.length > 200) el.removeChild(el.firstChild);
+}
+
+window.addEventListener('error', e => log(`js error: ${e.message}`, 'err'));
+window.addEventListener('unhandledrejection', e => log(`promise reject: ${e.reason?.message || e.reason}`, 'err'));
+
+// ─── 3. IndexedDB state ────────────────────────────────────────────────────
+
+const DB_NAME = 'myai-agent';
+const DB_VERSION = 1;
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('state')) db.createObjectStore('state');
+      if (!db.objectStoreNames.contains('keys')) db.createObjectStore('keys');
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function dbGet(store, key) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readonly');
+    const req = tx.objectStore(store).get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function dbSet(store, key, val) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    const req = tx.objectStore(store).put(val, key);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+async function dbDelete(store, key) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    const req = tx.objectStore(store).delete(key);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// ─── 4. Crypto primitives ──────────────────────────────────────────────────
+
+function bufToHex(buf) {
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+function hexToBuf(hex) {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) out[i / 2] = parseInt(hex.substr(i, 2), 16);
+  return out.buffer;
+}
+async function sha256(s) {
+  const enc = new TextEncoder().encode(s);
+  return bufToHex(await crypto.subtle.digest('SHA-256', enc));
+}
+
+async function ensureAttestationKey() {
+  if (STATE.attestationKey) return STATE.attestationKey;
+  const saved = await dbGet('keys', 'attestation');
+  if (saved && saved.privateJwk && saved.publicJwk) {
+    try {
+      const priv = await crypto.subtle.importKey('jwk', saved.privateJwk, { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign']);
+      const pub = await crypto.subtle.importKey('jwk', saved.publicJwk, { name: 'ECDSA', namedCurve: 'P-256' }, true, ['verify']);
+      STATE.attestationKey = { privateKey: priv, publicKey: pub };
+      STATE.attestationPubJwk = saved.publicJwk;
+      log('attestation key restored', 'mut');
+      return STATE.attestationKey;
+    } catch (e) {
+      log('failed to import saved attestation key, regenerating: ' + e.message, 'warn');
+    }
+  }
+  const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+  const privateJwk = await crypto.subtle.exportKey('jwk', kp.privateKey);
+  const publicJwk = await crypto.subtle.exportKey('jwk', kp.publicKey);
+  await dbSet('keys', 'attestation', { privateJwk, publicJwk });
+  STATE.attestationKey = kp;
+  STATE.attestationPubJwk = publicJwk;
+  log('attestation key generated + persisted', 'ok');
+  return kp;
+}
+
+async function signPayload(obj) {
+  await ensureAttestationKey();
+  const json = JSON.stringify(obj, Object.keys(obj).sort());
+  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, STATE.attestationKey.privateKey, new TextEncoder().encode(json));
+  return bufToHex(sig);
+}
+
+async function deviceFingerprint() {
+  if (STATE.deviceFingerprint) return STATE.deviceFingerprint;
+  const adapter = await navigator.gpu?.requestAdapter().catch(() => null);
+  const info = adapter ? await adapter.requestAdapterInfo?.().catch(() => ({})) : {};
+  const bits = [
+    navigator.userAgent,
+    navigator.platform || '',
+    navigator.language || '',
+    screen.width + 'x' + screen.height + 'x' + screen.colorDepth,
+    Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+    info?.vendor || '',
+    info?.architecture || '',
+    info?.device || '',
+  ].join('|');
+  STATE.deviceFingerprint = (await sha256(bits)).slice(0, 32);
+  return STATE.deviceFingerprint;
+}
+
+async function hmacTriple(secretHex) {
+  // For HMAC re-register: ts/nonce/sig over agent_id + ts + nonce, signed with agent_secret
+  const ts = Math.floor(Date.now() / 1000).toString();
+  const nonce = bufToHex(crypto.getRandomValues(new Uint8Array(16)));
+  const msg = `${STATE.agentId}|${ts}|${nonce}`;
+  const key = await crypto.subtle.importKey('raw', hexToBuf(secretHex), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = bufToHex(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(msg)));
+  return { ts, nonce, sig };
+}
+
+// ─── 5. Wallet ─────────────────────────────────────────────────────────────
+
+let cbProvider = null;
+async function initCoinbaseSDK() {
+  if (cbProvider) return cbProvider;
+  if (typeof window.CoinbaseWalletSDK === 'undefined' && typeof window.coinbaseWalletSDK === 'undefined') {
+    log('Coinbase SDK not loaded', 'err');
+    return null;
+  }
+  const SDK = window.CoinbaseWalletSDK || window.coinbaseWalletSDK;
+  try {
+    // v4 API: createCoinbaseWalletSDK with preference 'smartWalletOnly'
+    if (typeof SDK.createCoinbaseWalletSDK === 'function') {
+      const sdk = SDK.createCoinbaseWalletSDK({
+        appName: 'MyAI Browser Agent',
+        appLogoUrl: 'https://agent.myaitoken.io/icons/icon-192.png',
+        appChainIds: [8453], // Base mainnet
+        preference: { options: 'smartWalletOnly' },
+      });
+      cbProvider = sdk.getProvider();
+    } else {
+      // fallback: older constructor
+      const sdk = new SDK({ appName: 'MyAI Browser Agent', appLogoUrl: 'https://agent.myaitoken.io/icons/icon-192.png' });
+      cbProvider = sdk.makeWeb3Provider();
+    }
+    return cbProvider;
+  } catch (e) {
+    log('Coinbase SDK init failed: ' + e.message, 'err');
+    return null;
+  }
+}
+
+async function createSmartWallet() {
+  log('opening Coinbase Smart Wallet…', 'info');
+  const provider = await initCoinbaseSDK();
+  if (!provider) { log('cannot init wallet provider', 'err'); return null; }
+  try {
+    const accounts = await provider.request({ method: 'eth_requestAccounts' });
+    if (accounts && accounts[0]) {
+      STATE.walletAddress = accounts[0];
+      await dbSet('state', 'walletAddress', STATE.walletAddress);
+      log('wallet connected: ' + shortAddr(STATE.walletAddress), 'ok');
+      renderWallet();
+      return STATE.walletAddress;
+    }
+  } catch (e) {
+    log('wallet connect failed/cancelled: ' + e.message, 'warn');
+  }
+  return null;
+}
+
+function shortAddr(a) { return a ? a.slice(0, 6) + '…' + a.slice(-4) : '—'; }
+
+function renderWallet() {
+  const empty = document.getElementById('walletEmpty');
+  const conn = document.getElementById('walletConnected');
+  const manual = document.getElementById('walletManualEntry');
+  const dot = document.getElementById('dotWallet');
+  if (STATE.walletAddress) {
+    empty.style.display = 'none';
+    manual.style.display = 'none';
+    conn.style.display = 'block';
+    document.getElementById('walletAddr').textContent = STATE.walletAddress;
+    dot.className = 'dot on';
+  } else {
+    empty.style.display = 'block';
+    conn.style.display = 'none';
+    dot.className = 'dot warn';
+  }
+}
+
+// ─── 6. Model loading ──────────────────────────────────────────────────────
+
+async function getDeviceVRAMMB() {
+  try {
+    const adapter = await navigator.gpu?.requestAdapter();
+    if (!adapter) return null;
+    // adapter.limits.maxBufferSize is a hard cap, not VRAM. Use it as a proxy.
+    return Math.round((adapter.limits.maxBufferSize || 0) / (1024 * 1024));
+  } catch { return null; }
+}
+
+async function loadLocalModel(modelId, dtype = 'q4', task = 'text-generation') {
+  const T = await ensureTransformers();
+  log(`loading ${modelId} (${dtype}) for ${task}…`, 'info');
+  try {
+    const opts = { dtype, device: 'webgpu' };
+    const pipe = await T.pipeline(task, modelId, opts);
+    log(`✓ loaded ${modelId} on WebGPU`, 'ok');
+    return pipe;
+  } catch (e) {
+    log(`WebGPU failed (${e.message}); retrying on CPU/wasm…`, 'warn');
+    try {
+      const T2 = await ensureTransformers();
+      const pipe = await T2.pipeline(task, modelId, { dtype, device: 'wasm' });
+      log(`✓ loaded ${modelId} on CPU`, 'ok');
+      return pipe;
+    } catch (e2) {
+      log(`model load failed entirely: ${e2.message}`, 'err');
+      throw e2;
+    }
+  }
+}
+
+async function ensureTextModel() {
+  if (STATE.modelPipeline) return STATE.modelPipeline;
+  const sel = document.getElementById('modelSel');
+  const modelId = sel.value;
+  const dtype = sel.options[sel.selectedIndex].dataset.dtype || 'q4';
+  STATE.modelId = modelId;
+  document.getElementById('modelBadge').textContent = 'loading: ' + modelId.split('/').pop();
+  STATE.modelPipeline = await loadLocalModel(modelId, dtype, 'text-generation');
+  document.getElementById('modelBadge').textContent = modelId.split('/').pop();
+  document.getElementById('chatInput').disabled = false;
+  document.getElementById('sendBtn').disabled = false;
+  document.getElementById('dotChat').className = 'dot on';
+  await dbSet('state', 'modelId', modelId);
+  return STATE.modelPipeline;
+}
+
+async function ensureEmbedder() {
+  if (STATE.modelEmbedder) return STATE.modelEmbedder;
+  STATE.modelEmbedder = await loadLocalModel('Xenova/bge-small-en-v1.5', 'q8', 'feature-extraction');
+  return STATE.modelEmbedder;
+}
+
+async function ensureClassifier() {
+  if (STATE.modelClassifier) return STATE.modelClassifier;
+  STATE.modelClassifier = await loadLocalModel('Xenova/distilbert-base-uncased-finetuned-sst-2-english', 'q8', 'sentiment-analysis');
+  return STATE.modelClassifier;
+}
+
+// ─── 7. Coordinator client ─────────────────────────────────────────────────
+
+async function coordPost(path, body) {
+  const r = await fetch(STATE.coordinator + path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
+  const text = await r.text();
+  let json = null; try { json = JSON.parse(text); } catch { json = { raw: text }; }
+  return { status: r.status, body: json };
+}
+async function coordGet(path) {
+  const r = await fetch(STATE.coordinator + path);
+  const text = await r.text();
+  let json = null; try { json = JSON.parse(text); } catch { json = { raw: text }; }
+  return { status: r.status, body: json };
+}
+
+async function registerAgent() {
+  if (!STATE.walletAddress) {
+    log('register skipped: no wallet', 'warn');
+    return false;
+  }
+  await ensureAttestationKey();
+  const fp = await deviceFingerprint();
+  STATE.agentId = STATE.agentId || (await dbGet('state', 'agentId')) || null;
+  STATE.agentSecret = STATE.agentSecret || (await dbGet('state', 'agentSecret')) || null;
+
+  const body = {
+    agent_id: STATE.agentId || undefined,
+    name: STATE.displayName || ('browser-' + fp.slice(0, 8)),
+    platform: 'browser-webgpu',
+    tier: 'consumer',
+    wallet_address: STATE.walletAddress,
+    device_fingerprint: fp,
+    attestation_pubkey: STATE.attestationPubJwk,
+    capabilities: Object.keys(STATE.capabilities).filter(k => STATE.capabilities[k]),
+    models: STATE.modelId ? [STATE.modelId] : [],
+    gpus: await collectGpuInfo(),
+  };
+  // If we already have agent_secret, attach HMAC triple
+  if (STATE.agentId && STATE.agentSecret) {
+    const t = await hmacTriple(STATE.agentSecret);
+    body.ts = t.ts; body.nonce = t.nonce; body.sig = t.sig;
+  }
+  log('registering with coordinator…', 'info');
+  const r = await coordPost('/api/v1/agents/register', body);
+  if (r.status >= 400) {
+    log(`register failed (${r.status}): ${JSON.stringify(r.body).slice(0,200)}`, 'err');
+    return false;
+  }
+  const data = r.body?.data || r.body;
+  if (data?.agent_id) {
+    STATE.agentId = data.agent_id;
+    await dbSet('state', 'agentId', STATE.agentId);
+  }
+  if (data?.agent_secret) {
+    STATE.agentSecret = data.agent_secret;
+    await dbSet('state', 'agentSecret', STATE.agentSecret);
+    log('agent_secret persisted', 'mut');
+  }
+  log(`✓ registered as ${STATE.agentId}`, 'ok');
+  return true;
+}
+
+async function collectGpuInfo() {
+  try {
+    const adapter = await navigator.gpu?.requestAdapter();
+    if (!adapter) return [];
+    const info = await adapter.requestAdapterInfo?.().catch(() => ({}));
+    return [{
+      name: info?.device || info?.architecture || 'WebGPU',
+      vendor: info?.vendor || 'unknown',
+      gpu_id: 0,
+      utilization_gpu: 0,
+      vram_total_mb: Math.round((adapter.limits?.maxBufferSize || 0) / 1024 / 1024),
+    }];
+  } catch { return []; }
+}
+
+async function sendHeartbeat() {
+  if (!STATE.agentId) return;
+  try {
+    const r = await coordPost(`/api/v1/agents/${STATE.agentId}/heartbeat`, {
+      gpus: await collectGpuInfo(),
+      active_jobs: 0,
+      jobs_completed: STATE.jobsDone,
+    });
+    if (r.status >= 400) log(`heartbeat ${r.status}`, 'warn');
+  } catch (e) {
+    log('heartbeat error: ' + e.message, 'warn');
+  }
+}
+
+async function pollJobs() {
+  if (!STATE.agentId || !STATE.workerActive) return;
+  try {
+    const r = await coordGet(`/api/v1/agents/${STATE.agentId}/jobs/pending`);
+    if (r.status >= 400) return;
+    const jobs = r.body?.data?.jobs || r.body?.jobs || [];
+    if (jobs.length === 0) return;
+    log(`got ${jobs.length} pending job(s)`, 'info');
+    for (const job of jobs) {
+      handleJob(job).catch(e => log(`job error: ${e.message}`, 'err'));
+    }
+  } catch (e) {
+    log('poll error: ' + e.message, 'warn');
+  }
+}
+
+async function postJobComplete(jobId, result, opts = {}) {
+  const payload = {
+    job_id: jobId,
+    agent_id: STATE.agentId,
+    result,
+    success: opts.success !== false,
+    completed_at: new Date().toISOString(),
+    timing_ms: opts.timing_ms || 0,
+    model: STATE.modelId,
+  };
+  payload.signature = await signPayload({ jobId, result, ts: payload.completed_at });
+  const r = await coordPost(`/api/v1/agents/${STATE.agentId}/jobs/${jobId}/complete`, payload);
+  return r;
+}
+
+// ─── 8. Job handlers ───────────────────────────────────────────────────────
+
+async function handleJob(job) {
+  const jobId = job.id || job.job_id || job.chunk_id;
+  const type = (job.task_type || job.type || 'chat').toLowerCase();
+  const prompt = job.prompt || job.input || '';
+  log(`▶ job ${jobId} (${type})`, 'info');
+  const t0 = performance.now();
+  let result;
+  try {
+    if (type.includes('verify') || type.includes('judge') || job.is_verifier) {
+      result = await handleVerifyJob(job);
+    } else if (type.includes('embed')) {
+      result = await handleEmbedJob(job);
+    } else if (type.includes('classif') || type.includes('sentiment')) {
+      result = await handleClassifyJob(job);
+    } else {
+      // generic text-gen
+      result = await handleGenericJob(job);
+    }
+    const ms = Math.round(performance.now() - t0);
+    await postJobComplete(jobId, result, { timing_ms: ms });
+    STATE.jobsDone += 1;
+    renderStatus();
+    log(`✓ job ${jobId} done in ${ms}ms`, 'ok');
+  } catch (e) {
+    log(`✗ job ${jobId} failed: ${e.message}`, 'err');
+    try { await postJobComplete(jobId, { error: e.message }, { success: false }); } catch {}
+  }
+}
+
+async function handleVerifyJob(job) {
+  // Inputs the coordinator hands us as a verifier voter:
+  // job.prompt is the pre-built verifier prompt (candidate + rubric).
+  // We return a JSON object with {score: 0-1, rationale}.
+  await ensureTextModel();
+  const messages = [
+    { role: 'system', content: 'You are a strict but fair AI output verifier. Read the candidate response and rubric, then output a JSON object: {"score": <0.0-1.0>, "rationale": "<1-2 sentences>"}. Only output the JSON. No prose.' },
+    { role: 'user', content: job.prompt || job.input || '' },
+  ];
+  const out = await STATE.modelPipeline(messages, { max_new_tokens: 200, temperature: 0.2, do_sample: false });
+  const text = extractGenText(out);
+  return text;
+}
+
+async function handleEmbedJob(job) {
+  await ensureEmbedder();
+  const input = job.prompt || job.input || job.text || '';
+  const vec = await STATE.modelEmbedder(input, { pooling: 'mean', normalize: true });
+  return { embedding: Array.from(vec.data), dim: vec.dims?.[vec.dims.length - 1] || 0 };
+}
+
+async function handleClassifyJob(job) {
+  await ensureClassifier();
+  const input = job.prompt || job.input || job.text || '';
+  const out = await STATE.modelClassifier(input);
+  return out;
+}
+
+async function handleGenericJob(job) {
+  await ensureTextModel();
+  const messages = [{ role: 'user', content: job.prompt || job.input || '' }];
+  const out = await STATE.modelPipeline(messages, { max_new_tokens: job.max_tokens || 300, temperature: 0.7 });
+  return { text: extractGenText(out) };
+}
+
+function extractGenText(out) {
+  if (!out) return '';
+  if (Array.isArray(out)) out = out[0];
+  if (typeof out === 'string') return out;
+  if (out.generated_text) {
+    if (typeof out.generated_text === 'string') return out.generated_text;
+    if (Array.isArray(out.generated_text)) {
+      const last = out.generated_text[out.generated_text.length - 1];
+      return last?.content || '';
+    }
+  }
+  return JSON.stringify(out);
+}
+
+// ─── 9. Personal-agent chat ────────────────────────────────────────────────
+
+function pushMsg(role, content, tier, costMyai) {
+  const chat = document.getElementById('chat');
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  let meta = '';
+  if (role === 'agent') {
+    const tierClass = tier ? 'tier-' + tier : 'tier-local';
+    const tierLabel = tier || 'local';
+    meta = `<div class="meta"><span class="tier-badge ${tierClass}">${tierLabel}</span>${costMyai ? `<span>${costMyai.toFixed(3)} MYAI</span>` : ''}</div>`;
+  } else if (role === 'sys') {
+    meta = '';
+  }
+  div.innerHTML = `${meta}<div class="bubble"></div>`;
+  div.querySelector('.bubble').textContent = content;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+async function userSends(text) {
+  text = (text || '').trim();
+  if (!text) return;
+  pushMsg('user', text);
+  STATE.chatHistory.push({ role: 'user', content: text, ts: Date.now() });
+
+  // Step 1: try local model
+  await ensureTextModel();
+  const localResult = await runLocalChat(text);
+
+  // Step 2: decide whether to escalate based on self-rated confidence
+  const escalateNeeded = shouldEscalate(localResult);
+
+  if (!escalateNeeded || !canAffordEscalation()) {
+    pushMsg('agent', localResult.text, 'local', 0);
+    STATE.chatHistory.push({ role: 'agent', content: localResult.text, tier: 'local', ts: Date.now() });
+    if (escalateNeeded && !canAffordEscalation()) {
+      log('escalation skipped: budget cap reached or wallet empty', 'mut');
+    }
+    return;
+  }
+
+  // Step 3: escalate silently
+  try {
+    log('escalating to network…', 'info');
+    const escalated = await escalateToNetwork(text);
+    if (escalated) {
+      pushMsg('agent', escalated.text, escalated.tier, escalated.cost);
+      STATE.chatHistory.push({ role: 'agent', content: escalated.text, tier: escalated.tier, cost: escalated.cost, ts: Date.now() });
+      STATE.spentToday += (escalated.cost || 0);
+      saveSpent();
+      renderStatus();
+      return;
+    }
+  } catch (e) {
+    log('escalation failed: ' + e.message, 'warn');
+  }
+  // fall back to local answer
+  pushMsg('agent', localResult.text, 'local', 0);
+}
+
+async function runLocalChat(userText) {
+  const messages = [
+    { role: 'system', content: 'You are a helpful personal AI agent running locally on the user\'s device. Be concise. If a question requires specialized knowledge, current events, long reasoning, or analysis of large documents, end your reply with the marker "[ESCALATE]" so a larger model can help.' },
+    ...STATE.chatHistory.slice(-6).map(m => ({ role: m.role === 'agent' ? 'assistant' : m.role, content: m.content })),
+    { role: 'user', content: userText },
+  ];
+  const out = await STATE.modelPipeline(messages, { max_new_tokens: 300, temperature: 0.7 });
+  const text = extractGenText(out).trim();
+  const wantsEscalate = /\[ESCALATE\]/i.test(text);
+  return { text: text.replace(/\[ESCALATE\]/gi, '').trim(), wantsEscalate };
+}
+
+function shouldEscalate(localResult) { return !!localResult.wantsEscalate; }
+
+function canAffordEscalation() {
+  if (!STATE.walletAddress) return false;
+  rolloverSpent();
+  return STATE.spentToday + STATE.perQueryCap <= STATE.dailyCap;
+}
+
+async function escalateToNetwork(text) {
+  // 1. quote — what would it cost?
+  let cost = 0;
+  try {
+    const q = await coordPost('/v1/quote', {
+      candidate_response: '',
+      rubric: '',
+      original_prompt: text,
+      n_voters: 1,
+      model_class: 'chat',
+      tier: 'edge',
+      deadline_ms: 30000,
+    });
+    const subtotal = parseInt(q.body?.subtotal_wei || q.body?.total_wei || '0', 10);
+    cost = subtotal / 1e18;
+  } catch (_) { cost = 0.02; }
+  if (cost > STATE.perQueryCap) {
+    log(`escalation cost ${cost.toFixed(3)} MYAI > per-query cap ${STATE.perQueryCap}`, 'mut');
+    return null;
+  }
+  // 2. call /v1/chat/completions
+  const r = await coordPost('/v1/chat/completions', {
+    model: 'auto',
+    messages: [
+      ...STATE.chatHistory.slice(-6).map(m => ({ role: m.role === 'agent' ? 'assistant' : m.role, content: m.content })),
+      { role: 'user', content: text },
+    ],
+    max_tokens: 500,
+    temperature: 0.5,
+    user: STATE.walletAddress,
+  });
+  if (r.status >= 400) {
+    log(`escalation HTTP ${r.status}: ${JSON.stringify(r.body).slice(0,160)}`, 'warn');
+    return null;
+  }
+  const out = r.body?.choices?.[0]?.message?.content || r.body?.content || '';
+  const tier = r.body?.chosen_agent_tier || (r.body?.chosen_agent_name === 'hal9000' ? 'datacenter' : 'edge');
+  return { text: out, tier, cost };
+}
+
+function rolloverSpent() {
+  const today = new Date().toISOString().slice(0, 10);
+  if (STATE.spentTodayDay !== today) {
+    STATE.spentTodayDay = today;
+    STATE.spentToday = 0;
+    dbSet('state', 'spentTodayDay', today);
+    dbSet('state', 'spentToday', 0);
+  }
+}
+function saveSpent() {
+  dbSet('state', 'spentToday', STATE.spentToday);
+}
+
+// ─── 10. UI bindings + rendering ───────────────────────────────────────────
+
+function renderStatus() {
+  document.getElementById('stState').textContent = STATE.workerActive ? 'earning' : 'idle';
+  document.getElementById('stJobs').textContent = STATE.jobsDone;
+  document.getElementById('stEarn').textContent = STATE.earned.toFixed(3);
+  document.getElementById('stSpent').textContent = STATE.spentToday.toFixed(3);
+  document.getElementById('stRep').textContent = STATE.reputation == null ? '—' : STATE.reputation.toFixed(2);
+  document.getElementById('spentToday').textContent = STATE.spentToday.toFixed(3);
+  document.getElementById('dailyCapShow').textContent = STATE.dailyCap.toFixed(2);
+  const up = STATE.startedAt ? Math.floor((Date.now() - STATE.startedAt) / 1000) : 0;
+  document.getElementById('stUp').textContent = formatUptime(up);
+}
+function formatUptime(s) {
+  if (s < 60) return s + 's';
+  if (s < 3600) return Math.floor(s / 60) + 'm';
+  return Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm';
+}
+
+async function startWorker() {
+  if (STATE.workerActive) return;
+  if (!STATE.walletAddress) { log('connect a wallet first', 'warn'); return; }
+  log('starting worker…', 'info');
+  try { await ensureTextModel(); } catch (_) { return; }
+  const ok = await registerAgent();
+  if (!ok) { log('registration failed; not starting worker', 'err'); return; }
+  STATE.workerActive = true;
+  STATE.startedAt = Date.now();
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('stopBtn').disabled = false;
+  document.getElementById('dotEarn').className = 'dot on';
+  document.getElementById('dotCaps').className = 'dot on';
+  STATE.jobPollHandle = setInterval(pollJobs, 5000);
+  STATE.heartbeatHandle = setInterval(sendHeartbeat, 30000);
+  await sendHeartbeat();
+  await pollJobs();
+  enableAntiThrottle();
+  renderStatus();
+  log('worker active — polling for jobs', 'ok');
+}
+
+function stopWorker() {
+  if (!STATE.workerActive) return;
+  STATE.workerActive = false;
+  if (STATE.jobPollHandle) { clearInterval(STATE.jobPollHandle); STATE.jobPollHandle = null; }
+  if (STATE.heartbeatHandle) { clearInterval(STATE.heartbeatHandle); STATE.heartbeatHandle = null; }
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('stopBtn').disabled = true;
+  document.getElementById('dotEarn').className = 'dot';
+  document.getElementById('dotCaps').className = 'dot';
+  disableAntiThrottle();
+  renderStatus();
+  log('worker stopped', 'mut');
+}
+
+function bindUI() {
+  document.getElementById('sendBtn').addEventListener('click', () => {
+    const inp = document.getElementById('chatInput');
+    const t = inp.value; inp.value = '';
+    if (t.trim()) userSends(t).catch(e => log(e.message, 'err'));
+  });
+  document.getElementById('chatInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('sendBtn').click(); }
+  });
+
+  document.getElementById('startBtn').addEventListener('click', startWorker);
+  document.getElementById('stopBtn').addEventListener('click', stopWorker);
+
+  document.getElementById('createWalletBtn').addEventListener('click', createSmartWallet);
+  document.getElementById('useExistingWalletLink').addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('walletEmpty').style.display = 'none';
+    document.getElementById('walletManualEntry').style.display = 'block';
+  });
+  document.getElementById('cancelManualBtn').addEventListener('click', () => {
+    document.getElementById('walletManualEntry').style.display = 'none';
+    document.getElementById('walletEmpty').style.display = 'block';
+  });
+  document.getElementById('useManualBtn').addEventListener('click', async () => {
+    const v = document.getElementById('manualWallet').value.trim();
+    if (!/^0x[a-fA-F0-9]{40}$/.test(v)) { log('invalid wallet address', 'warn'); return; }
+    STATE.walletAddress = v;
+    await dbSet('state', 'walletAddress', v);
+    log('wallet set to ' + shortAddr(v), 'ok');
+    document.getElementById('walletManualEntry').style.display = 'none';
+    renderWallet();
+  });
+  document.getElementById('changeWalletLink').addEventListener('click', async (e) => {
+    e.preventDefault();
+    STATE.walletAddress = null;
+    await dbDelete('state', 'walletAddress');
+    renderWallet();
+  });
+
+  // Settings
+  document.getElementById('settingsBtn').addEventListener('click', openSettings);
+  document.getElementById('closeSettingsBtn').addEventListener('click', closeSettings);
+  document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+
+  // Capability toggles
+  for (const cap of ['Verify', 'Embed', 'Classify']) {
+    document.getElementById('cap' + cap).addEventListener('change', async (e) => {
+      STATE.capabilities[cap.toLowerCase()] = e.target.checked;
+      await dbSet('state', 'capabilities', STATE.capabilities);
+      if (STATE.agentId) registerAgent();
+    });
+  }
+
+  // PWA install
+  let deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault(); deferredPrompt = e;
+    const btn = document.getElementById('installBtn');
+    btn.style.display = 'inline-flex';
+    btn.onclick = async () => {
+      if (deferredPrompt) { deferredPrompt.prompt(); deferredPrompt = null; btn.style.display = 'none'; }
+    };
+  });
+}
+
+function openSettings() {
+  document.getElementById('modelSel').value = STATE.modelId || 'onnx-community/Qwen2.5-1.5B-Instruct';
+  document.getElementById('displayNameInput').value = STATE.displayName || '';
+  document.getElementById('perQueryCap').value = STATE.perQueryCap;
+  document.getElementById('dailyCap').value = STATE.dailyCap;
+  document.getElementById('coordUrl').value = STATE.coordinator;
+  document.getElementById('settingsModal').classList.add('show');
+}
+function closeSettings() { document.getElementById('settingsModal').classList.remove('show'); }
+async function saveSettings() {
+  const newModel = document.getElementById('modelSel').value;
+  const changed = newModel !== STATE.modelId;
+  STATE.modelId = newModel;
+  STATE.displayName = document.getElementById('displayNameInput').value.trim() || 'browser-anon';
+  STATE.perQueryCap = parseFloat(document.getElementById('perQueryCap').value) || 0.10;
+  STATE.dailyCap = parseFloat(document.getElementById('dailyCap').value) || 1.00;
+  STATE.coordinator = document.getElementById('coordUrl').value.trim() || 'https://api.myaitoken.io';
+  await dbSet('state', 'modelId', STATE.modelId);
+  await dbSet('state', 'displayName', STATE.displayName);
+  await dbSet('state', 'perQueryCap', STATE.perQueryCap);
+  await dbSet('state', 'dailyCap', STATE.dailyCap);
+  await dbSet('state', 'coordinator', STATE.coordinator);
+  closeSettings();
+  renderStatus();
+  if (changed && STATE.modelPipeline) {
+    log('model changed — reloading on next message', 'mut');
+    STATE.modelPipeline = null;
+    document.getElementById('modelBadge').textContent = 'not loaded';
+    document.getElementById('chatInput').disabled = true;
+    document.getElementById('sendBtn').disabled = true;
+  }
+  log('settings saved', 'ok');
+}
+
+// ─── 11. Stability primitives ──────────────────────────────────────────────
+
+function enableAntiThrottle() {
+  // Silent audio context defeats Chrome's background-tab throttling
+  if (STATE.audioCtx) return;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    STATE.audioCtx = new AC();
+    const osc = STATE.audioCtx.createOscillator();
+    const gain = STATE.audioCtx.createGain();
+    gain.gain.value = 0.0001; // effectively silent
+    osc.connect(gain).connect(STATE.audioCtx.destination);
+    osc.start();
+    log('anti-throttle audio enabled', 'mut');
+  } catch (e) {
+    log('anti-throttle failed: ' + e.message, 'warn');
+  }
+}
+function disableAntiThrottle() {
+  try {
+    if (STATE.audioCtx) { STATE.audioCtx.close(); STATE.audioCtx = null; }
+  } catch {}
+}
+
+// Page visibility — reduce polling when hidden, restore when visible
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && STATE.workerActive) {
+    pollJobs(); sendHeartbeat();
+  }
+});
+
+// Service worker registration
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+
+// WebGPU device-lost recovery (best-effort; transformers.js handles this internally on most paths)
+async function checkWebGPU() {
+  if (!navigator.gpu) {
+    const b = document.getElementById('gpuBanner');
+    b.className = 'banner warn';
+    b.textContent = 'WebGPU not supported. Running on CPU/wasm (slower). Chrome 113+ or Safari 18+ recommended.';
+    return false;
+  }
+  try {
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) throw new Error('no adapter');
+    const info = await adapter.requestAdapterInfo?.().catch(() => ({}));
+    const vendor = info?.vendor || info?.architecture || 'unknown';
+    const vramMb = Math.round((adapter.limits?.maxBufferSize || 0) / 1024 / 1024);
+    const b = document.getElementById('gpuBanner');
+    b.className = 'banner good';
+    b.textContent = `WebGPU ready · ${vendor} · buffer limit ${vramMb} MB`;
+    return true;
+  } catch (e) {
+    const b = document.getElementById('gpuBanner');
+    b.className = 'banner bad';
+    b.textContent = 'WebGPU adapter failed: ' + e.message;
+    return false;
+  }
+}
+
+// ─── 12. Bootstrap ─────────────────────────────────────────────────────────
+
+async function loadState() {
+  try {
+    STATE.walletAddress = await dbGet('state', 'walletAddress') || null;
+    STATE.agentId = await dbGet('state', 'agentId') || null;
+    STATE.agentSecret = await dbGet('state', 'agentSecret') || null;
+    STATE.modelId = await dbGet('state', 'modelId') || 'onnx-community/Qwen2.5-1.5B-Instruct';
+    STATE.displayName = await dbGet('state', 'displayName') || 'browser-anon';
+    STATE.perQueryCap = await dbGet('state', 'perQueryCap') || 0.10;
+    STATE.dailyCap = await dbGet('state', 'dailyCap') || 1.00;
+    STATE.coordinator = await dbGet('state', 'coordinator') || 'https://api.myaitoken.io';
+    STATE.capabilities = (await dbGet('state', 'capabilities')) || STATE.capabilities;
+    STATE.spentToday = await dbGet('state', 'spentToday') || 0;
+    STATE.spentTodayDay = await dbGet('state', 'spentTodayDay') || null;
+    rolloverSpent();
+    log(`state restored: wallet=${shortAddr(STATE.walletAddress)} agent=${STATE.agentId || '—'}`, 'mut');
+  } catch (e) {
+    log('state load partial fail: ' + e.message, 'warn');
+  }
+}
+
+(async function bootstrap() {
+  log('MyAI agent v1 booting…', 'info');
+  await loadState();
+  bindUI();
+  renderWallet();
+  renderStatus();
+  await checkWebGPU();
+  // model selector default + caps from saved state
+  const sel = document.getElementById('modelSel');
+  if (STATE.modelId) {
+    for (let i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === STATE.modelId) { sel.selectedIndex = i; break; }
+    }
+  }
+  document.getElementById('capVerify').checked = !!STATE.capabilities.verify;
+  document.getElementById('capEmbed').checked = !!STATE.capabilities.embed;
+  document.getElementById('capClassify').checked = !!STATE.capabilities.classify;
+
+  // Greet
+  pushMsg('sys', 'Hi! I\'m your personal AI agent running on this device. Ask me anything. I\'ll answer locally when I can, and ask the network for help on harder questions (within your spending limits).');
+
+  // Auto-start if URL hint
+  if (new URLSearchParams(location.search).has('autostart')) {
+    setTimeout(() => startWorker().catch(() => {}), 500);
+  }
+})();
+</script>
+
+</body>
+</html>
