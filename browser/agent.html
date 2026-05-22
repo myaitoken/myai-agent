@@ -12,7 +12,14 @@
   <meta property="og:image" content="https://myaitoken.io/og-image.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="canonical" href="https://agent.myaitoken.io" />
-  <link rel="icon" href="https://myaitoken.io/favicon.ico" />
+  <link rel="icon" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#8b5cf6" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="MyAI Agent" />
   <!-- Coinbase Wallet SDK v4 — Smart Wallet (passkey, no seed phrase) on Base -->
   <script src="https://cdn.jsdelivr.net/npm/@coinbase/wallet-sdk@4/dist/browser.js"></script>
 
@@ -83,6 +90,15 @@
     .nav-links { display: flex; gap: 1.5rem; align-items: center; }
     .nav-links a { color: var(--muted); text-decoration: none; font-size: 14px; }
     .nav-links a:hover { color: var(--text); }
+    #installBtn {
+      display: none; /* shown by JS when install prompt is available */
+      align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: 8px;
+      background: linear-gradient(135deg, #8b5cf6, #22d3ee);
+      border: none; color: white; font-size: 13px; font-weight: 600;
+      cursor: pointer; white-space: nowrap;
+    }
+    #installBtn:hover { opacity: 0.9; }
 
     /* ── LAYOUT ── */
     .wrap { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
@@ -146,6 +162,15 @@
     button.danger { background: linear-gradient(135deg, #ef4444 0%, #f59e0b 100%); }
     button.ghost { background: transparent; border: 1px solid var(--border-2); color: var(--text); }
     button.sm { padding: 0.45rem 0.9rem; font-size: 0.82rem; width: auto; }
+    #benchBtn { background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%); width: auto; padding: 0.6rem 1rem; font-size: 0.85rem; }
+    #benchBtn.running { opacity: 0.6; cursor: wait; }
+    .bench-row { display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0; border-bottom: 1px solid var(--border); font-size: 0.82rem; }
+    .bench-row:last-child { border-bottom: none; }
+    .bench-badge { padding: 2px 7px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; }
+    .bench-best { background: #10b981; color: #fff; }
+    .bench-ok   { background: #3b82f6; color: #fff; }
+    .bench-slow { background: #f59e0b; color: #000; }
+    .bench-oom  { background: #ef4444; color: #fff; }
 
     /* ── easy-setup card ── */
     .setup-card {
@@ -248,6 +273,9 @@
       <a href="https://myaitoken.io">Home</a>
       <a href="https://myaitoken.io/network">Network</a>
       <a href="https://myaitoken.io/docs">Docs</a>
+      <button id="installBtn" title="Install MyAI Agent as an app">
+        ↓ Install App
+      </button>
     </div>
   </div>
 </nav>
@@ -259,6 +287,11 @@
     No install. No CLI. WebGPU inference runs in your tab, picks up jobs from the
     MyAI coordinator, and earns MYAI tokens to your wallet address. Closing the tab
     stops the node.
+  </p>
+  <p class="lede" style="font-size:0.97rem;color:var(--dim);margin-top:-0.5rem;margin-bottom:1.2rem">
+    <strong style="color:var(--fg)">Become a verifier for AI agents</strong> &mdash;
+    your phone or laptop earns MYAI scoring AI output for orchestrators worldwide.
+    <a href="/trust" style="color:var(--accent);text-decoration:underline;text-underline-offset:3px">How does this work? &rarr;</a>
   </p>
 
   <div id="gpuBanner" class="banner warn">Checking WebGPU support...</div>
@@ -329,6 +362,7 @@
         <div class="row">
           <button id="startBtn">Start agent</button>
           <button id="stopBtn" class="danger" disabled>Stop</button>
+          <button id="benchBtn" title="Benchmark all models on this device">⚡ Benchmark</button>
         </div>
       </div>
 
@@ -394,967 +428,68 @@
     </div>
   </div>
 
+
+  <!-- ── Qualified Verifier Models (#9051) ── -->
+  <div id="verifierPanel" style="margin:2rem 0 1.5rem;padding:1.25rem 1.5rem;background:rgba(0,255,163,.05);border:1px solid rgba(0,255,163,.2);border-radius:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-size:1rem;font-weight:700;color:var(--fg)">✅ Qualified Verifier Models</div>
+        <div style="font-size:0.8rem;color:var(--dim);margin-top:2px">Models approved for scoring AI output on the MyAI network</div>
+      </div>
+      <a href="/trust" style="font-size:0.8rem;color:var(--accent);text-decoration:underline;text-underline-offset:3px">What is a verifier? &rarr;</a>
+    </div>
+    <div id="verifierModelList" style="display:grid;gap:0.6rem">
+      <div style="color:var(--dim);font-size:0.85rem">Loading qualified models…</div>
+    </div>
+  </div>
+
+  <script>
+  (async function loadVerifierModels() {
+    const container = document.getElementById('verifierModelList');
+    if (!container) return;
+    try {
+      // Public read endpoint — falls back to curated static list if unavailable
+      const resp = await fetch('https://api.myaitoken.io/v1/admin/qualified-verifiers', {
+        headers: { 'Accept': 'application/json' }
+      }).catch(() => null);
+
+      let models = [];
+      if (resp && resp.ok) {
+        const data = await resp.json();
+        models = Array.isArray(data) ? data : (data.models || []);
+      }
+
+      // Static fallback list if endpoint unavailable
+      if (!models.length) {
+        models = [
+          { id: 'HuggingFaceTB/SmolLM2-135M-Instruct', name: 'SmolLM2-135M', dtype: 'q8', size: '~135MB', badge: 'CPU-safe' },
+          { id: 'onnx-community/Qwen2.5-0.5B-Instruct', name: 'Qwen2.5-0.5B', dtype: 'q4', size: '~500MB', badge: 'Recommended' },
+          { id: 'onnx-community/Qwen2.5-1.5B-Instruct-q4f16', name: 'Qwen2.5-1.5B', dtype: 'q4f16', size: '~1.1GB', badge: 'Quality' },
+        ];
+      }
+
+      container.innerHTML = models.map(m => {
+        const mid   = m.id   || m.model_id || '';
+        const mname = m.name || m.display_name || mid.split('/').pop() || mid;
+        const dtype = m.dtype || 'q4';
+        const size  = m.size  || '';
+        const badge = m.badge || m.tier || '';
+        return '<div style="display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0.75rem;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:8px;gap:10px;flex-wrap:wrap">' +
+          '<div style="display:flex;align-items:center;gap:8px;min-width:0">' +
+          (badge ? '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:rgba(0,255,163,.12);color:#00ffa3;white-space:nowrap">' + badge + '</span>' : '') +
+          '<span style="font-size:0.85rem;font-weight:600;color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + mname + '</span>' +
+          (size ? '<span style="font-size:0.75rem;color:var(--dim)">' + size + '</span>' : '') +
+          '</div>' +
+          '<button class="sm" style="white-space:nowrap;padding:4px 12px;font-size:0.8rem" onclick="loadModelById(' + JSON.stringify(mid) + ',' + JSON.stringify(dtype) + ')">Load &amp; verify</button>' +
+          '</div>';
+      }).join('');
+    } catch(e) {
+      container.innerHTML = '<div style="color:var(--dim);font-size:0.85rem">Could not load model list — select a model above to start verifying.</div>';
+    }
+  })();
+  </script>
+
   <footer>
     Beta. WebGPU agent v0.1.0 &mdash;
     <a href="https://myaitoken.io/network">network</a> &middot;
-    <a href="https://myaitoken.io/docs">docs</a> &middot;
-    <a href="https://github.com/myaitoken">github</a>
-    <br/>
-    Closing this tab stops the agent. Your wallet address never leaves your browser except
-    in the registration payload sent to the coordinator.
-  </footer>
-
-</div>
-
-<!-- ── App logic: WebGPU check + Transformers.js loader + register/poll loop ── -->
-<script type="module">
-  // Coordinator endpoints (mirrors myai-agent.py)
-  const $ = (id) => document.getElementById(id);
-  const log = (msg, cls = 'l-mut') => {
-    const el = document.createElement('div');
-    el.className = 'line ' + cls;
-    el.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    $('log').appendChild(el);
-    $('log').scrollTop = $('log').scrollHeight;
-  };
-  const setDot = (id, state) => {
-    const d = $(id);
-    d.className = 'dot ' + (state || '');
-  };
-  const setBanner = (cls, msg) => {
-    const b = $('gpuBanner');
-    b.className = 'banner ' + cls;
-    b.textContent = msg;
-  };
-
-  // ── persist + restore form state ──
-  const LS = 'myai-browser-agent.v1';
-  const restore = () => {
-    try {
-      const s = JSON.parse(localStorage.getItem(LS) || '{}');
-      if (s.name)   $('name').value   = s.name;
-      if (s.wallet) $('wallet').value = s.wallet;
-      if (s.model)  $('model').value  = s.model;
-      if (s.coord)  $('coordUrl').value = s.coord;
-    } catch (_) {}
-  };
-  const persist = () => {
-    const s = {
-      name:  $('name').value,
-      wallet: $('wallet').value,
-      model: $('model').value,
-      coord: $('coordUrl').value,
-    };
-    localStorage.setItem(LS, JSON.stringify(s));
-  };
-  ['name','wallet','model','coordUrl'].forEach(id => $(id).addEventListener('change', persist));
-  restore();
-
-  // ── Wallet helpers: Paste + Connect ──
-  const setWallet = (addr) => {
-    $('wallet').value = addr;
-    persist();
-    $('walletHint').style.display = 'none';
-  };
-  const walletHint = (msg, ok) => {
-    const h = $('walletHint');
-    h.textContent = msg;
-    h.style.color = ok ? 'var(--good)' : 'var(--warn)';
-    h.style.display = 'block';
-  };
-
-  // 📋 Paste button
-  $('pasteWalletBtn').addEventListener('click', async () => {
-    try {
-      const text = await navigator.clipboard.readText();
-      const addr = text.trim();
-      if (/^0x[0-9a-fA-F]{40}$/.test(addr)) {
-        setWallet(addr);
-        walletHint('✓ Wallet pasted', true);
-      } else {
-        walletHint('Clipboard doesn\'t look like an 0x address — paste manually', false);
-      }
-    } catch (e) {
-      walletHint('Clipboard access denied — paste manually or use Connect', false);
-    }
-  });
-
-  // 🔗 Connect Wallet button — tries injected provider first, falls back to Coinbase SDK
-  $('connectWalletBtn').addEventListener('click', async () => {
-    const btn = $('connectWalletBtn');
-    btn.textContent = '…';
-    btn.disabled = true;
-    try {
-      let addr = null;
-      if (window.ethereum) {
-        // MetaMask / Brave / in-app browser injected provider
-        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-        addr = accounts && accounts[0];
-      } else {
-        // No injected provider — use Coinbase Wallet SDK (shows QR + Smart Wallet option)
-        const provider = getCBProvider();
-        if (provider) {
-          const accounts = await provider.request({ method: 'eth_requestAccounts' });
-          addr = accounts && accounts[0];
-        }
-      }
-      if (addr) {
-        localStorage.setItem(WALLET_ADDR_LS, addr);
-        setWallet(addr);
-        $('setupCard').style.display = 'none';
-        walletHint('✓ Connected: ' + addr.slice(0,6) + '…' + addr.slice(-4), true);
-      } else {
-        // Last resort — deep links
-        const mmLink = `https://metamask.app.link/dapp/${location.host}${location.pathname}`;
-        walletHint('No wallet found. ', false);
-        $('walletHint').innerHTML +=
-          `<a href="${mmLink}" target="_blank" style="color:var(--brand);text-decoration:underline;">Open in MetaMask →</a>`;
-      }
-    } catch (e) {
-      walletHint('Connection failed: ' + e.message, false);
-    } finally {
-      btn.textContent = 'Connect';
-      btn.disabled = false;
-    }
-  });
-
-  // ── Easy wallet setup — Coinbase Smart Wallet (passkey, no seed phrase) ──
-  const WALLET_ADDR_LS = 'myai-browser-agent.wallet';
-
-  // Lazy-init Coinbase Wallet SDK (loaded from CDN in <head>)
-  let _cbProvider = null;
-  function getCBProvider() {
-    if (_cbProvider) return _cbProvider;
-    try {
-      // CoinbaseWalletSDK is the global from the CDN script
-      const sdk = new CoinbaseWalletSDK({
-        appName:    'MyAI Browser Agent',
-        appLogoUrl: 'https://myaitoken.io/favicon.ico',
-        appChainIds: [8453],          // Base mainnet
-      });
-      _cbProvider = sdk.makeWeb3Provider();
-    } catch (e) {
-      console.warn('Coinbase Wallet SDK init failed:', e.message);
-      _cbProvider = null;
-    }
-    return _cbProvider;
-  }
-
-  // Restore saved wallet address on load → collapse setup card
-  (function restoreWallet() {
-    const saved = localStorage.getItem(WALLET_ADDR_LS);
-    if (saved || $('wallet').value) {
-      if (saved && !$('wallet').value) setWallet(saved);
-      $('setupCard').style.display = 'none';
-    }
-  })();
-
-  // Setup button — open Coinbase Smart Wallet flow
-  $('setupBtn').addEventListener('click', async () => {
-    const btn = $('setupBtn');
-    btn.textContent = 'Opening wallet…';
-    btn.disabled = true;
-    try {
-      const provider = getCBProvider();
-      if (!provider) throw new Error('Coinbase Wallet SDK not available');
-      const accounts = await provider.request({ method: 'eth_requestAccounts' });
-      const addr = accounts && accounts[0];
-      if (!addr) throw new Error('No account returned');
-      localStorage.setItem(WALLET_ADDR_LS, addr);
-      setWallet(addr);
-      $('setupAddrDisplay').textContent = addr;
-      $('setupResult').style.display = 'block';
-      // Register with coordinator (fire-and-forget)
-      fetch('https://api.myaitoken.io/api/v1/waitlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          wallet: addr,
-          name:   $('name') ? $('name').value.trim() : '',
-          source: 'browser-agent-smart-wallet'
-        })
-      }).catch(() => {});
-      // Bind "I have my own wallet" link
-      const advEl = document.getElementById('setupAdvanced');
-      if (advEl) advEl.addEventListener('click', (e) => {
-        e.preventDefault();
-        $('setupCard').style.display = 'none';
-        $('wallet').value = '';
-        $('wallet').focus();
-        walletHint('Enter your 0x wallet address above', false);
-      });
-    } catch (e) {
-      walletHint('Wallet setup failed: ' + e.message + '. Try "Connect" below or paste your address.', false);
-      // Fall through — user can still use paste/connect
-    } finally {
-      btn.textContent = '🔵 Create Smart Wallet (free)';
-      btn.disabled = false;
-    }
-  });
-
-  // "I have my own wallet" — also bind for initial HTML state
-  const _advEl = document.getElementById('setupAdvanced');
-  if (_advEl) _advEl.addEventListener('click', (e) => {
-    e.preventDefault();
-    $('setupCard').style.display = 'none';
-    $('wallet').value = '';
-    $('wallet').focus();
-    walletHint('Enter your 0x wallet address above', false);
-  });
-
-  // generate / restore agent id
-  const AGENT_ID_KEY = 'myai-browser-agent.id';
-  let AGENT_ID = localStorage.getItem(AGENT_ID_KEY);
-  if (!AGENT_ID) {
-    AGENT_ID = 'browser-' + crypto.randomUUID();
-    localStorage.setItem(AGENT_ID_KEY, AGENT_ID);
-  }
-
-  // ── Anti-sybil v2 piece 1: device fingerprint (canvas + WebGPU + screen + tz) ──
-  async function sha256Hex(buf) {
-    const dig = await crypto.subtle.digest('SHA-256', buf);
-    return Array.from(new Uint8Array(dig)).map(b => b.toString(16).padStart(2,'0')).join('');
-  }
-
-  function canvasFingerprint() {
-    try {
-      const c = document.createElement('canvas');
-      c.width = 220; c.height = 60;
-      const ctx = c.getContext('2d');
-      ctx.textBaseline = 'top';
-      ctx.font = "14px 'Inter', system-ui, sans-serif";
-      ctx.fillStyle = '#f60';
-      ctx.fillRect(10, 10, 60, 30);
-      ctx.fillStyle = '#069';
-      ctx.fillText('MyAI \u26A1 fp \uD83D\uDDFF', 4, 4);
-      ctx.fillStyle = 'rgba(102,204,0,0.7)';
-      ctx.fillText('Canvas-' + (navigator.platform || ''), 4, 22);
-      // Geometry primitive
-      ctx.globalCompositeOperation = 'multiply';
-      ctx.fillStyle = 'rgb(255,0,255)';
-      ctx.beginPath(); ctx.arc(50, 30, 20, 0, Math.PI*2, true); ctx.closePath(); ctx.fill();
-      return c.toDataURL();
-    } catch (e) {
-      return 'no-canvas:' + (e.message || 'err');
-    }
-  }
-
-  async function computeDeviceFingerprint() {
-    // 1) Canvas fingerprint pixel data
-    const canvasUrl = canvasFingerprint();
-    // 2) WebGPU adapter info
-    let gpuInfoStr = 'no-gpu';
-    try {
-      if (navigator.gpu) {
-        const adapter = await navigator.gpu.requestAdapter();
-        if (adapter) {
-          let info = adapter.info || {};
-          if (!Object.keys(info).length && adapter.requestAdapterInfo) {
-            try { info = await adapter.requestAdapterInfo(); } catch (_) {}
-          }
-          gpuInfoStr = [info.vendor||'?', info.architecture||'?', info.device||'?', info.description||'?'].join('|');
-        }
-      }
-    } catch (_) { /* keep no-gpu */ }
-    // 3) Screen metrics
-    const screenStr = [
-      screen.width, screen.height,
-      window.devicePixelRatio || 1,
-      screen.colorDepth || 0,
-    ].join('x');
-    // 4) Timezone + lang + cores
-    const tzStr = [
-      new Date().getTimezoneOffset(),
-      navigator.language || '?',
-      navigator.languages ? navigator.languages.join(',') : '?',
-      navigator.hardwareConcurrency || 0,
-    ].join('|');
-    // Concat + SHA-256
-    const blob = ['v1', canvasUrl, gpuInfoStr, screenStr, tzStr].join('::');
-    const enc = new TextEncoder().encode(blob);
-    return await sha256Hex(enc);
-  }
-
-  // ── Anti-sybil v2 piece 2: ECDSA P-256 keypair (non-extractable) via Web Crypto ──
-  const ATTEST_DB = 'myai-browser-agent.attest';
-  const ATTEST_KEY_NAME = 'attest-privkey-v1';
-  const ATTEST_PUB_KEY = 'myai-browser-agent.attest.pub.v1';
-
-  function openAttestDB() {
-    return new Promise((resolve, reject) => {
-      const req = indexedDB.open(ATTEST_DB, 1);
-      req.onupgradeneeded = () => req.result.createObjectStore('keys');
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-  }
-  async function idbGet(name) {
-    const db = await openAttestDB();
-    return new Promise((res, rej) => {
-      const tx = db.transaction('keys', 'readonly');
-      const r = tx.objectStore('keys').get(name);
-      r.onsuccess = () => res(r.result || null);
-      r.onerror = () => rej(r.error);
-    });
-  }
-  async function idbPut(name, val) {
-    const db = await openAttestDB();
-    return new Promise((res, rej) => {
-      const tx = db.transaction('keys', 'readwrite');
-      tx.objectStore('keys').put(val, name);
-      tx.oncomplete = () => res();
-      tx.onerror = () => rej(tx.error);
-    });
-  }
-
-  async function loadOrGenerateAttestKey() {
-    let priv = await idbGet(ATTEST_KEY_NAME);
-    let pubB64 = localStorage.getItem(ATTEST_PUB_KEY);
-    if (priv && pubB64) return { priv, pubB64 };
-    // Generate non-extractable ECDSA P-256 keypair
-    const kp = await crypto.subtle.generateKey(
-      { name: 'ECDSA', namedCurve: 'P-256' },
-      false,  // extractable=false  -> private key cannot leave the device
-      ['sign', 'verify']
-    );
-    const rawPub = await crypto.subtle.exportKey('raw', kp.publicKey);
-    pubB64 = btoa(String.fromCharCode(...new Uint8Array(rawPub)))
-      .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-    await idbPut(ATTEST_KEY_NAME, kp.privateKey);
-    localStorage.setItem(ATTEST_PUB_KEY, pubB64);
-    log('Generated ECDSA P-256 attestation key (non-extractable, persisted in IndexedDB).', 'l-info');
-    return { priv: kp.privateKey, pubB64 };
-  }
-
-  async function signAttestation(priv, agentId) {
-    const ts = Math.floor(Date.now() / 1000);
-    const nonceBytes = new Uint8Array(16);
-    crypto.getRandomValues(nonceBytes);
-    const nonce = Array.from(nonceBytes).map(b => b.toString(16).padStart(2,'0')).join('');
-    const msg = `${agentId}|${ts}|${nonce}`;
-    const sigBuf = await crypto.subtle.sign(
-      { name: 'ECDSA', hash: 'SHA-256' }, priv, new TextEncoder().encode(msg)
-    );
-    const sig = btoa(String.fromCharCode(...new Uint8Array(sigBuf)))
-      .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-    return { attest_ts: ts, attest_nonce: nonce, attest_sig: sig };
-  }
-
-  // Module-level state for the attestation key.
-  let ATTEST_PRIV = null;
-  let ATTEST_PUB_B64 = null;
-  let DEVICE_FINGERPRINT = null;
-
-  // ── Backend detection: WebGPU → WASM/CPU fallback ──
-  let webgpuOK = false;
-  let wasmOK   = false;
-  let useDevice = 'cpu';
-  let gpuAdapter = null;
-
-  function detectPlatform() {
-    const ua = navigator.userAgent || '';
-    if (/Xbox/i.test(ua))        return 'xbox';
-    if (/PlayStation/i.test(ua)) return 'playstation';
-    if (/iPhone|iPad|iPod/i.test(ua)) return 'ios';
-    if (/Android/i.test(ua))    return 'android';
-    return 'desktop';
-  }
-
-  async function checkWebGPU() { return checkBackend(); } // alias for compat
-
-  async function checkBackend() {
-    const platform = detectPlatform();
-
-    // ── Try WebGPU first. Allow on Chrome/Edge iOS (they support it); skip only on Safari iOS ──
-    const isIOS = platform === 'ios';
-    const ua2 = navigator.userAgent || '';
-    const isIOSSafari = isIOS && !/CriOS|EdgiOS|FxiOS|OPiOS/i.test(ua2);
-    if (!isIOSSafari && 'gpu' in navigator) {
-      try {
-        gpuAdapter = await navigator.gpu.requestAdapter();
-        if (gpuAdapter) {
-          const info = gpuAdapter.info || {};
-          try {
-            if (!Object.keys(info).length && typeof gpuAdapter.requestAdapterInfo === 'function') {
-              Object.assign(info, await gpuAdapter.requestAdapterInfo());
-            }
-          } catch (_) {}
-          const lim = gpuAdapter.limits || {};
-          const desc = info.description || info.device || info.vendor || 'unknown GPU';
-          const vram = lim.maxBufferSize ? (lim.maxBufferSize / (1024**3)).toFixed(2) + ' GB' : '?';
-          $('gpuInfo').innerHTML = `<strong>${desc}</strong><br/>vendor: ${info.vendor || '?'}<br/>arch: ${info.architecture || '?'}<br/>maxBufferSize: ${vram}`;
-          setBanner('good', 'WebGPU available. Pick a model and start the agent.');
-          webgpuOK = true;
-          wasmOK   = true;
-          useDevice = 'webgpu';
-          // Default to Qwen 0.5B on desktop WebGPU — best balance
-          // On iOS: keep SmolLM2-135M — 0.5B causes OOM-kill on iPhone GPU
-          if (!isIOS) {
-            const qwen = Array.from($('model').options).find(o => o.value.includes('Qwen2.5-0.5B'));
-            if (qwen) $('model').value = qwen.value;
-          }
-          return true;
-        }
-      } catch (e) {
-        log('WebGPU failed (' + e.message + ') — falling back to CPU/WASM', 'l-warn');
-      }
-    }
-
-    // ── WASM/CPU fallback — works on iOS, Xbox, PlayStation, Firefox, etc. ──
-    wasmOK   = true;
-    useDevice = 'wasm';
-
-    const platformLabel = isIOSSafari
-      ? 'iOS Safari'
-      : ({
-          ios:         'Chrome on iOS',
-          android:     'Android browser',
-          xbox:        'Xbox browser',
-          playstation: 'PlayStation browser',
-          desktop:     'this browser',
-        }[platform] || 'this browser');
-
-    setBanner('warn',
-      `WebGPU unavailable on ${platformLabel} — running CPU/WASM mode (slower). Use the smallest model.`);
-    $('gpuInfo').innerHTML =
-      `<span style="color:#fbbf24"><strong>CPU / WASM mode</strong></span>` +
-      `<br/>Platform: ${platformLabel}` +
-      `<br/>No GPU acceleration — inference will be slow`;
-
-    // Auto-select the smallest CPU-safe model
-    const opts = Array.from($('model').options);
-    const cpuOpt = opts.find(o => o.dataset.cpuOk);
-    if (cpuOpt) $('model').value = cpuOpt.value;
-
-    log(`${platformLabel}: no WebGPU — CPU/WASM inference active (expect 30-120s per response)`, 'l-warn');
-    $('startBtn').disabled = false;
-    return true;
-  }
-  // Bootstrap anti-sybil v2 artifacts (device fingerprint + attestation key)
-  try {
-    const ak = await loadOrGenerateAttestKey();
-    ATTEST_PRIV = ak.priv;
-    ATTEST_PUB_B64 = ak.pubB64;
-  } catch (e) {
-    log('Attestation key bootstrap failed (continuing unverified): ' + e.message, 'l-warn');
-  }
-  try {
-    DEVICE_FINGERPRINT = await computeDeviceFingerprint();
-    log('Device fingerprint: ' + (DEVICE_FINGERPRINT||'').slice(0,16) + '...', 'l-mut');
-  } catch (e) {
-    log('Fingerprint compute failed: ' + e.message, 'l-warn');
-  }
-  await checkWebGPU();
-
-  // ── Transformers.js dynamic import ──
-  let pipeline, env, generator;
-  // Embedding pipeline (lazy-loaded on first embed job).
-  let embedder = null;
-  const EMBED_MODEL_ID = 'Xenova/all-MiniLM-L6-v2';
-  async function loadTransformers() {
-    if (pipeline) return;
-    log('Loading Transformers.js from CDN...', 'l-info');
-    const mod = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2/dist/transformers.min.js');
-    pipeline = mod.pipeline;
-    env = mod.env;
-    env.allowLocalModels = false;
-    env.useBrowserCache = true;
-    log('Transformers.js loaded.', 'l-ok');
-  }
-
-  async function loadEmbedderLazy() {
-    if (embedder) return;
-    await loadTransformers();
-    log(`Loading embedding model ${EMBED_MODEL_ID}...`, 'l-info');
-    const t0 = performance.now();
-    try {
-      const _isIOS = (detectPlatform() === 'ios');
-      embedder = await pipeline('feature-extraction', EMBED_MODEL_ID, {
-        device: useDevice,
-        // iOS gets q8 even on WebGPU — fp32 weights push the tab past iOS's
-        // per-tab memory limit while the tokenizer + onnx runtime are loaded.
-        dtype:  _isIOS ? 'q8' : (useDevice === 'webgpu' ? 'fp32' : 'q8'),
-      });
-      const dt = ((performance.now() - t0) / 1000).toFixed(1);
-      log(`Embedding model loaded in ${dt}s.`, 'l-ok');
-    } catch (e) {
-      embedder = null;
-      log(`Embedding model load failed: ${e.message}`, 'l-err');
-      throw e;
-    }
-  }
-
-  // Fallback chain: if a model fails (gated, too large, network error) try the next smaller one
-  const MODEL_FALLBACK_CHAIN = [
-    'HuggingFaceTB/SmolLM2-135M-Instruct',
-    'HuggingFaceTB/SmolLM2-360M-Instruct',
-    'onnx-community/Qwen2.5-0.5B-Instruct',
-  ];
-
-  async function loadModelById(modelId, dtype) {
-    await loadTransformers();
-    log(`Loading model ${modelId} (device: ${useDevice}, dtype: ${dtype})...`, 'l-info');
-    $('stState').textContent = 'loading';
-    setDot('dotStatus', 'warn');
-    const t0 = performance.now();
-    generator = await pipeline('text-generation', modelId, {
-      device: useDevice,
-      dtype: dtype,
-      progress_callback: (p) => {
-        if (p.status === 'progress' && p.file && p.progress) {
-          if (Math.random() < 0.05) {
-            log(`  ${p.file}: ${p.progress.toFixed(1)}%`, 'l-mut');
-          }
-        } else if (p.status === 'ready') {
-          log(`  ready: ${p.task || ''}`, 'l-ok');
-        }
-      },
-    });
-    const dt = ((performance.now() - t0) / 1000).toFixed(1);
-    log(`Model loaded in ${dt}s.`, 'l-ok');
-    return dt;
-  }
-
-  async function loadModel(modelId) {
-    const selectedOpt = $('model').selectedOptions[0];
-    const preferredDtype = (selectedOpt && selectedOpt.dataset.dtype) || (useDevice === 'webgpu' ? 'q4' : 'q8');
-
-    // Try requested model first
-    try {
-      await loadModelById(modelId, preferredDtype);
-      $('stModel').textContent = modelId.split('/').pop().split('-').slice(0,2).join('-');
-      $('stState').textContent = 'ready';
-      setDot('dotStatus', 'live');
-      return;
-    } catch (e) {
-      const isGated = /401|403|Unauthorized|gated|access/i.test(e.message);
-      const reason = isGated ? 'gated/unauthorized' : e.message;
-      log(`  Model ${modelId} failed (${reason}) — trying fallback chain`, 'l-warn');
-      // Clear bad model from localStorage so it doesn't persist
-      try { const s = JSON.parse(localStorage.getItem('myai_agent') || '{}'); if (s.model === modelId) { delete s.model; localStorage.setItem('myai_agent', JSON.stringify(s)); } } catch (_) {}
-    }
-
-    // Walk fallback chain, skipping the model we already tried
-    for (const fallback of MODEL_FALLBACK_CHAIN) {
-      if (fallback === modelId) continue;
-      try {
-        log(`  Trying fallback: ${fallback}`, 'l-mut');
-        // Update dropdown to match
-        const opts = Array.from($('model').options);
-        const match = opts.find(o => o.value === fallback);
-        if (match) $('model').value = fallback;
-        const fallbackDtype = (match && match.dataset.dtype) || 'q8';
-        await loadModelById(fallback, fallbackDtype);
-        $('stModel').textContent = fallback.split('/').pop().split('-').slice(0,2).join('-');
-        $('stState').textContent = 'ready';
-        setDot('dotStatus', 'live');
-        return;
-      } catch (fe) {
-        log(`  Fallback ${fallback} also failed: ${fe.message}`, 'l-warn');
-      }
-    }
-
-    // All models failed
-    throw new Error('All models failed to load. Check network or try a smaller model.');
-  }
-
-  // ── HTTP helper ──
-  async function http(method, url, body, timeoutMs = 30000) {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), timeoutMs);
-    try {
-      const r = await fetch(url, {
-        method,
-        headers: body ? { 'Content-Type': 'application/json' } : {},
-        body: body ? JSON.stringify(body) : undefined,
-        signal: ctrl.signal,
-      });
-      const text = await r.text();
-      let json = null;
-      try { json = text ? JSON.parse(text) : null; } catch (_) { json = { _raw: text }; }
-      return { status: r.status, ok: r.ok, body: json };
-    } catch (e) {
-      return { status: 0, ok: false, body: { _err: e.message } };
-    } finally {
-      clearTimeout(t);
-    }
-  }
-
-  // ── Coordinator I/O (mirrors myai-agent.py contract) ──
-  function coord() { return $('coordUrl').value.replace(/\/+$/, ''); }
-
-  function buildRegisterPayload() {
-    const modelId = $('model').value;
-    const info = gpuAdapter?.info || {};
-    return {
-      agent_id:        AGENT_ID,
-      agent_name:      $('name').value || ('browser-' + AGENT_ID.slice(8, 16)),
-      version:         '0.2.0-browser',
-      platform:        'browser-webgpu',
-      device_fingerprint:      DEVICE_FINGERPRINT,
-      attestation_pubkey_b64:  ATTEST_PUB_B64,
-      ollama_url:      null,
-      vllm_url:        null,
-      vllm_healthy:    false,
-      vllm_models:     [],
-      gpus:            [{
-        name:         info.description || info.device || 'WebGPU',
-        vendor:       info.vendor || 'unknown',
-        architecture: info.architecture || 'unknown',
-        memory_free_mb: 0,
-        backend:      'webgpu',
-      }],
-      models:                       (detectPlatform() === 'ios') ? [EMBED_MODEL_ID] : [modelId, EMBED_MODEL_ID],
-      wallet_address:               $('wallet').value || null,
-      price_per_hour_myai:          0.25,
-      tensor_parallel_supported:    false,
-      max_tp_size:                  1,
-      pipeline_supported:           false,
-      backend_kind:                 'transformersjs-webgpu',
-    };
-  }
-
-  async function register() {
-    const payload = buildRegisterPayload();
-    log(`Registering as "${payload.agent_name}" (${AGENT_ID}) ...`, 'l-info');
-    const r = await http('POST', `${coord()}/api/v1/agents/register`, payload, 15000);
-    if (r.ok && (r.body?.success || r.body?.agent_id)) {
-      log(`  registered (HTTP ${r.status})`, 'l-ok');
-      return true;
-    }
-    // Agent UUID already has a secret in the coordinator — browser can't satisfy HMAC.
-    // Generate a fresh UUID and retry once so the user doesn't get stuck in offline mode.
-    if (r.body?.error?.code === 'HMAC_REQUIRED' || /hmac_required/i.test(JSON.stringify(r.body))) {
-      log(`  Agent ID has a stored secret — generating fresh ID and retrying…`, 'l-mut');
-      AGENT_ID = 'browser-' + crypto.randomUUID();
-      localStorage.setItem(AGENT_ID_KEY, AGENT_ID);
-      const payload2 = buildRegisterPayload();
-      const r2 = await http('POST', `${coord()}/api/v1/agents/register`, payload2, 15000);
-      if (r2.ok && (r2.body?.success || r2.body?.agent_id)) {
-        log(`  registered with new ID (${AGENT_ID})`, 'l-ok');
-        return true;
-      }
-      log(`  retry register HTTP ${r2.status}: ${JSON.stringify(r2.body).slice(0,200)}`, 'l-warn');
-      return false;
-    }
-    if (r.status === 409) {
-      log('  REJECTED: this device is already associated with a different wallet.', 'l-err');
-      log('  Either use the wallet originally registered, or clear browser data to start fresh.', 'l-warn');
-    } else if (r.status === 429) {
-      log('  REJECTED: per-wallet browser-agent cap reached. Unlink one before adding another.', 'l-err');
-    } else {
-      log(`  register HTTP ${r.status}: ${JSON.stringify(r.body).slice(0,200)}`, 'l-warn');
-      log(`  note: if coordinator does not yet support browser-webgpu agents, that's expected.`, 'l-mut');
-    }
-    return false;
-  }
-
-  async function heartbeat() {
-    const body = {
-      status: 'online',
-      gpus: buildRegisterPayload().gpus,
-      vllm_url: null,
-      vllm_healthy: false,
-      vllm_models: [],
-      models: [$('model').value],
-      tensor_parallel_supported: false,
-      max_tp_size: 1,
-      pipeline_supported: false,
-      backend_kind: 'transformersjs-webgpu',
-    };
-    if (ATTEST_PRIV) {
-      try { Object.assign(body, await signAttestation(ATTEST_PRIV, AGENT_ID)); }
-      catch (e) { log('attestation sign error on heartbeat: ' + e.message, 'l-warn'); }
-    }
-    const r = await http('POST', `${coord()}/api/v1/agents/${AGENT_ID}/heartbeat`, body, 10000);
-    if (r.status === 401) {
-      log('attestation rejected by coordinator — see server logs', 'l-err');
-    }
-    return r.ok;
-  }
-
-  async function pollOnce() {
-    const r = await http('GET', `${coord()}/api/v1/agents/${AGENT_ID}/jobs/pending`, null, 10000);
-    if (!r.ok) return [];
-    const jobs = r.body?.data?.jobs || r.body?.jobs || [];
-    return Array.isArray(jobs) ? jobs : [];
-  }
-
-  async function completeJob(jobId, result, success = true) {
-    const url = `${coord()}/api/v1/agents/${AGENT_ID}/jobs/${jobId}/complete`;
-    const body = { success, result };
-    if (ATTEST_PRIV) {
-      try { Object.assign(body, await signAttestation(ATTEST_PRIV, AGENT_ID)); }
-      catch (e) { log('attestation sign error on complete: ' + e.message, 'l-warn'); }
-    }
-    await http('POST', url, body, 15000);
-  }
-
-  // ── inference ──
-  let totalTokens = 0;
-  let totalJobs = 0;
-
-  function tryParseMessages(prompt) {
-    if (typeof prompt !== 'string') return null;
-    const s = prompt.trim();
-    if (!s.startsWith('[')) return null;
-    try { return JSON.parse(s); } catch (_) { return null; }
-  }
-
-  async function runInference(prompt, maxNewTokens = 256) {
-    const msgs = tryParseMessages(prompt);
-    if (msgs) {
-      const out = await generator(msgs, { max_new_tokens: maxNewTokens, do_sample: false });
-      const text = out?.[0]?.generated_text;
-      if (Array.isArray(text)) {
-        const last = text[text.length - 1];
-        return typeof last === 'string' ? last : (last?.content || JSON.stringify(last));
-      }
-      return typeof text === 'string' ? text : JSON.stringify(out);
-    }
-    const out = await generator(prompt, { max_new_tokens: maxNewTokens, do_sample: false });
-    const text = out?.[0]?.generated_text || '';
-    return typeof text === 'string' ? text.slice(prompt.length).trim() : JSON.stringify(out);
-  }
-
-  function isEmbedJob(job) {
-    const m = String(job.model || '').toLowerCase();
-    return m === EMBED_MODEL_ID.toLowerCase()
-        || m.includes('minilm')
-        || m.includes('all-minilm')
-        || m.includes('embed');
-  }
-
-  async function runEmbedding(text) {
-    await loadEmbedderLazy();
-    const out = await embedder(text, { pooling: 'mean', normalize: true });
-    // transformers.js returns a Tensor; .data is a Float32Array.
-    const data = out?.data ?? out;
-    const arr = data instanceof Float32Array ? Array.from(data) : Array.from(data || []);
-    if (!arr.length) throw new Error('empty embedding tensor');
-    return arr.map((x) => +x);
-  }
-
-  async function processJob(job) {
-    const jobId = job.job_id || job.id || 'unknown';
-    const prompt = job.prompt || '';
-    log(`job ${jobId} -- model=${job.model || '?'} prompt=${(prompt+'').slice(0,60).replace(/\n/g,' ')}...`, 'l-info');
-    if (!prompt) {
-      await completeJob(jobId, '', false);
-      return;
-    }
-    // Embedding jobs: short-circuit to the feature-extraction pipeline.
-    if (isEmbedJob(job)) {
-      try {
-        const t0e = performance.now();
-        const vec = await runEmbedding(prompt);
-        const dte = ((performance.now() - t0e) / 1000).toFixed(2);
-        log(`  embed ok (${vec.length}d in ${dte}s)`, 'l-ok');
-        totalJobs += 1;
-        $('stJobs').textContent = totalJobs;
-        await completeJob(jobId, JSON.stringify(vec), true);
-      } catch (e) {
-        log(`  embed failed: ${e.message}`, 'l-err');
-        await completeJob(jobId, '', false);
-      }
-      return;
-    }
-    try {
-      const t0 = performance.now();
-      const result = await runInference(prompt, Math.min(job.max_tokens || 256, 512));
-      const dt = ((performance.now() - t0) / 1000).toFixed(2);
-      const approxTok = Math.max(1, Math.round(result.length / 4));
-      totalTokens += approxTok;
-      totalJobs += 1;
-      $('stJobs').textContent = totalJobs;
-      $('stTok').textContent = totalTokens;
-      $('stEarn').textContent = (totalJobs * 0.0001).toFixed(4);
-      log(`  done ${dt}s, ~${approxTok} tok`, 'l-ok');
-      await completeJob(jobId, result, true);
-    } catch (e) {
-      log(`  job error: ${e.message}`, 'l-err');
-      await completeJob(jobId, `browser-agent-error: ${e.message}`, false);
-    }
-  }
-
-  // ── main loop ──
-  let running = false;
-  let pollTimer = null, hbTimer = null, uptimeTimer = null;
-  let startedAt = 0;
-  let earningsTimer = null;
-
-  // Fetches /api/v1/agents/{id}/earnings and updates the right-rail stats.
-  // Quietly no-ops if the coordinator doesn't yet expose the endpoint (404).
-  async function refreshEarnings() {
-    if (!AGENT_ID) return;
-    const r = await http('GET', `${coord()}/api/v1/agents/${AGENT_ID}/earnings`, null, 8000);
-    if (!r.ok || !r.body) return;
-    const data = r.body.data || r.body;
-    if (typeof data !== 'object' || data === null) return;
-    const daily = Number(data.daily_myai || 0);
-    const life  = Number(data.lifetime_myai || 0);
-    const jobs  = Number(data.jobs_completed || 0);
-    const thr   = !!data.throttled;
-    $('stEarn').textContent = life.toFixed(2);
-    $('stJobs').textContent = String(jobs);
-    if (document.getElementById('stEarnDaily')) {
-      document.getElementById('stEarnDaily').textContent = daily.toFixed(2);
-      document.getElementById('stEarnLife').textContent  = life.toFixed(2);
-    }
-    // Flip the banner once we've actually earned something — keep BETA badge.
-    if (life > 0) {
-      const ph  = document.getElementById('placeholderNote');
-      const liv = document.getElementById('payoutLive');
-      if (ph)  ph.style.display  = 'none';
-      if (liv) liv.style.display = 'inline';
-    }
-    const tn = document.getElementById('throttleNote');
-    if (tn) tn.style.display = thr ? 'inline' : 'none';
-  }
-
-  async function start() {
-    if (running) return;
-    persist();
-    if (!webgpuOK && !wasmOK && !(await checkBackend())) return;
-    $('startBtn').disabled = true;
-    setDot('dotAgent', 'warn');
-    // iOS: text-gen + embed at once OOMs iPhone Safari/Chrome and the tab reloads.
-    // Skip text-gen entirely on iOS; eager-load embed so the first job is instant.
-    const _iosEmbedOnly = (detectPlatform() === 'ios');
-    try {
-      if (_iosEmbedOnly) {
-        log('iOS detected — embed-only mode (skipping text-gen to avoid OOM-kill)', 'l-mut');
-        await loadEmbedderLazy();
-      } else {
-        await loadModel($('model').value);
-      }
-    } catch (e) {
-      log('Model load failed: ' + e.message, 'l-err');
-      $('startBtn').disabled = false;
-      setDot('dotAgent', 'bad');
-      $('stState').textContent = 'error';
-      return;
-    }
-    const ok = await register();
-    if (!ok) {
-      log('Continuing in solo / offline mode -- coordinator did not accept register.', 'l-warn');
-    }
-    running = true;
-    startedAt = Date.now();
-    setDot('dotAgent', 'live');
-    setDot('dotLog', 'live');
-    $('stopBtn').disabled = false;
-    $('stState').textContent = ok ? 'online' : 'offline';
-
-    uptimeTimer = setInterval(() => {
-      const s = Math.floor((Date.now() - startedAt) / 1000);
-      const m = Math.floor(s/60), h = Math.floor(m/60);
-      $('stUp').textContent = h ? `${h}h ${m%60}m` : (m ? `${m}m ${s%60}s` : `${s}s`);
-    }, 1000);
-
-    hbTimer = setInterval(async () => {
-      const ok = await heartbeat();
-      if (!ok) log('heartbeat failed', 'l-warn');
-    }, 30000);
-
-    // ── Real-earnings poller (2026-05-18, #8966 follow-up) ──
-    earningsTimer = setInterval(refreshEarnings, 30000);
-    // Fire one immediately so the UI updates without waiting 30s
-    refreshEarnings();
-
-    loop = async () => {
-      if (!running) return;
-      try {
-        const jobs = await pollOnce();
-        for (const j of jobs) {
-          if (!running) break;
-          await processJob(j);
-        }
-      } catch (e) {
-        log('poll error: ' + e.message, 'l-warn');
-      }
-      pollTimer = setTimeout(loop, 5000);
-    };
-    loop();
-    log('Agent running. Polling every 5s. Heartbeat every 30s.', 'l-ok');
-    // Prevent iOS from suspending the tab while the agent is active
-    await acquireWakeLock();
-  }
-
-  function stop() {
-    running = false;
-    if (pollTimer) clearTimeout(pollTimer);
-    if (hbTimer)   clearInterval(hbTimer);
-    if (uptimeTimer) clearInterval(uptimeTimer);
-    if (earningsTimer) clearInterval(earningsTimer);
-    pollTimer = null;
-    if (wakeLock && !wakeLock.released) wakeLock.release().catch(() => {});
-    wakeLock = null;
-    $('stopBtn').disabled = true;
-    $('startBtn').disabled = false;
-    $('stState').textContent = 'stopped';
-    setDot('dotAgent', '');
-    setDot('dotLog', '');
-    setDot('dotStatus', '');
-    log('Agent stopped.', 'l-warn');
-  }
-
-  $('startBtn').addEventListener('click', start);
-  $('stopBtn').addEventListener('click', stop);
-  window.addEventListener('beforeunload', () => { if (running) stop(); });
-
-  // ── iOS tab-survival: wake lock + visibility + freeze/resume ──────────────
-  let wakeLock = null;
-
-  async function acquireWakeLock() {
-    if (!('wakeLock' in navigator)) return;
-    try {
-      wakeLock = await navigator.wakeLock.request('screen');
-      log('Screen wake lock acquired (prevents iOS from killing tab).', 'l-mut');
-      wakeLock.addEventListener('release', () => {
-        log('Wake lock released — will re-acquire when tab is visible.', 'l-mut');
-      });
-    } catch (e) {
-      log('Wake lock unavailable: ' + e.message, 'l-mut');
-    }
-  }
-
-  // Re-acquire wake lock and restart poll loop when tab comes back to foreground
-  document.addEventListener('visibilitychange', async () => {
-    if (document.visibilityState === 'visible') {
-      if (running) {
-        log('Tab visible again — checking poll loop...', 'l-mut');
-        // Restart poll loop if it died while backgrounded
-        if (!pollTimer) {
-          log('Poll loop was stopped — restarting.', 'l-warn');
-          pollTimer = setTimeout(loop, 100);
-        }
-        // Re-acquire wake lock (iOS releases it on hide)
-        if (wakeLock === null || wakeLock.released) {
-          await acquireWakeLock();
-        }
-      }
-    }
-  });
-
-  // Page Lifecycle API: Chrome on iOS fires freeze/resume
-  window.addEventListener('freeze', () => {
-    log('Page frozen by browser (backgrounded) — poll loop paused.', 'l-mut');
-  });
-  window.addEventListener('resume', () => {
-    if (running) {
-      log('Page resumed — restarting poll loop.', 'l-mut');
-      if (!pollTimer) pollTimer = setTimeout(loop, 100);
-    }
-  });
-
-  // Expose loop so visibilitychange handler can reference it
-  // (loop is declared inside start() — hoist a ref here)
-  let loop = null;
-
-  log('Browser agent ready. Set wallet + display name, then click Start.', 'l-info');
-  log(`Agent ID: ${AGENT_ID}`, 'l-mut');
-</script>
-
-</body>
-</html>
+    <a href="https://myaitoken.io/docs">doc--output truncated--
