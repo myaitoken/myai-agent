@@ -796,7 +796,15 @@ async function registerAgent() {
     device_fingerprint: fp,
     attestation_pubkey: STATE.attestationPubJwk,
     capabilities: Object.keys(STATE.capabilities).filter(k => STATE.capabilities[k]),
-    models: STATE.modelId ? [STATE.modelId] : [],
+    models: (() => {
+      const out = [];
+      if (STATE.modelId) out.push(STATE.modelId);
+      // Advertise capability-specific model identifiers so the coordinator
+      // can route TrOCR/transcribe jobs to this browser-tier agent (#9099).
+      if (STATE.capabilities?.transcribe) out.push('trocr-base-printed');
+      if (STATE.capabilities?.embed)      out.push('bge-small');
+      return out;
+    })(),
     gpus: await collectGpuInfo(),
   };
   // If we already have agent_secret, attach HMAC triple
@@ -894,13 +902,18 @@ async function handleJob(job) {
   const t0 = performance.now();
   let result;
   try {
+    // Route by job model when present — lets the coordinator dispatch a
+    // transcribe job by setting model='trocr-base-printed' even when the
+    // task_type field isn't populated (the existing chunked-job schema has
+    // no task_type column).
+    const m = (job.model || '').toLowerCase();
     if (type.includes('verify') || type.includes('judge') || job.is_verifier) {
       result = await handleVerifyJob(job);
-    } else if (type.includes('embed')) {
+    } else if (type.includes('embed') || m.includes('bge') || m.includes('embed')) {
       result = await handleEmbedJob(job);
     } else if (type.includes('classif') || type.includes('sentiment')) {
       result = await handleClassifyJob(job);
-    } else if (type.includes('transcribe') || type.includes('ocr') || type.includes('page_transcribe')) {
+    } else if (type.includes('transcribe') || type.includes('ocr') || type.includes('page_transcribe') || m.includes('trocr') || m.includes('ocr')) {
       result = await handleTranscribeJob(job);
     } else {
       // generic text-gen
