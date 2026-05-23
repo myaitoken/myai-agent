@@ -277,6 +277,11 @@
           <span class="cap-name">Classification</span>
           <span class="cap-status">sentiment / intent / NSFW</span>
         </div>
+        <div class="cap-row">
+          <input type="checkbox" id="capTranscribe" checked />
+          <span class="cap-name">Page transcribe (OCR)</span>
+          <span class="cap-status">TrOCR · KYC pages</span>
+        </div>
         <div style="display:flex;gap:8px;margin-top:0.6rem;">
           <button id="startBtn" class="sm" style="background:var(--grad);color:white;border:none;">▶ Start earning</button>
           <button id="stopBtn" class="danger" disabled>Stop</button>
@@ -452,7 +457,8 @@ const STATE = {
   modelEmbedder: null,         // embedding pipeline (loaded on demand)
   modelClassifier: null,       // classifier pipeline (loaded on demand)
   workerActive: false,
-  capabilities: { verify: true, embed: true, classify: true },
+  capabilities: { verify: true, embed: true, classify: true, transcribe: true },
+  modelTranscriber: null,        // OCR pipeline (transformers.js TrOCR), loaded on demand
   coordinator: 'https://api.myaitoken.io',
   perQueryCap: 0.10,
   dailyCap: 1.00,
@@ -894,6 +900,8 @@ async function handleJob(job) {
       result = await handleEmbedJob(job);
     } else if (type.includes('classif') || type.includes('sentiment')) {
       result = await handleClassifyJob(job);
+    } else if (type.includes('transcribe') || type.includes('ocr') || type.includes('page_transcribe')) {
+      result = await handleTranscribeJob(job);
     } else {
       // generic text-gen
       result = await handleGenericJob(job);
@@ -936,6 +944,55 @@ async function handleClassifyJob(job) {
   const out = await STATE.modelClassifier(input);
   return out;
 }
+
+// Transcribe / OCR job (#9099): receives a page image as base64 (data URL or
+// raw base64) and returns the transcribed text. Uses Microsoft's TrOCR
+// (printed) by default — small enough to run on phone-class WebGPU, fast.
+// Job shape expected:
+//   { type: 'transcribe' | 'page_transcribe' | 'ocr',
+//     image_b64: '...' OR image_url: 'data:image/png;base64,...' OR
+//     pages: [{ image_b64: '...' }, ...]   <- multi-page mode
+//   }
+// Returns either { text: '...' } or { pages: [{ text: '...' }, ...] }.
+async function handleTranscribeJob(job) {
+  await ensureTranscriber();
+  const single = job.image_b64 || job.image_url || job.input;
+  const pages  = Array.isArray(job.pages) ? job.pages : (single ? [{ image_b64: single }] : []);
+  if (pages.length === 0) {
+    throw new Error('transcribe: no image_b64 / image_url / pages provided');
+  }
+
+  const out = [];
+  for (let i = 0; i < pages.length; i++) {
+    const p = pages[i];
+    const raw = p.image_b64 || p.image_url || '';
+    if (!raw) { out.push({ page: i + 1, text: '', error: 'no image' }); continue; }
+    const url = raw.startsWith('data:') ? raw : ('data:image/png;base64,' + raw);
+    try {
+      const result = await STATE.modelTranscriber(url, { max_new_tokens: 1024 });
+      const text = Array.isArray(result) ? (result[0]?.generated_text || '') : (result?.generated_text || '');
+      out.push({ page: i + 1, text: (text || '').trim() });
+    } catch (err) {
+      out.push({ page: i + 1, text: '', error: err.message });
+    }
+  }
+
+  if (pages.length === 1) return { text: out[0].text, error: out[0].error };
+  return { pages: out, total_pages: out.length };
+}
+
+async function ensureTranscriber() {
+  if (STATE.modelTranscriber) return;
+  log('loading OCR transcriber (TrOCR-base-printed)…', 'info');
+  const tjs = await loadTransformersJs();
+  const modelId = 'Xenova/trocr-base-printed';
+  STATE.modelTranscriber = await tjs.pipeline('image-to-text', modelId, {
+    device: navigator.gpu ? 'webgpu' : 'wasm',
+    dtype: 'fp16',
+  });
+  log('OCR transcriber loaded', 'ok');
+}
+
 
 async function handleGenericJob(job) {
   await ensureTextModel();
@@ -1348,6 +1405,7 @@ async function loadState() {
   document.getElementById('capVerify').checked = !!STATE.capabilities.verify;
   document.getElementById('capEmbed').checked = !!STATE.capabilities.embed;
   document.getElementById('capClassify').checked = !!STATE.capabilities.classify;
+  const ctEl = document.getElementById('capTranscribe'); if (ctEl) ctEl.checked = !!STATE.capabilities.transcribe;
 
   // Greet
   pushMsg('sys', 'Hi! I\'m your personal AI agent running on this device. Ask me anything. I\'ll answer locally when I can, and ask the network for help on harder questions (within your spending limits).');
