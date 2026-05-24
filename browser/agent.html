@@ -1246,13 +1246,15 @@ function stopWorker() {
 }
 
 function bindUI() {
-  document.getElementById('sendBtn').addEventListener('click', () => {
+  const _sendBtn = document.getElementById('sendBtn');
+  const _chatInp = document.getElementById('chatInput');
+  if (_sendBtn) _sendBtn.addEventListener('click', () => {
     const inp = document.getElementById('chatInput');
     const t = inp.value; inp.value = '';
     if (t.trim()) userSends(t).catch(e => log(e.message, 'err'));
   });
-  document.getElementById('chatInput').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('sendBtn').click(); }
+  if (_chatInp) _chatInp.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('sendBtn')?.click(); }
   });
 
   document.getElementById('startBtn').addEventListener('click', startWorker);
@@ -1338,8 +1340,10 @@ async function saveSettings() {
     log('model changed — reloading on next message', 'mut');
     STATE.modelPipeline = null;
     document.getElementById('modelBadge').textContent = 'not loaded';
-    document.getElementById('chatInput').disabled = true;
-    document.getElementById('sendBtn').disabled = true;
+    const _ci = document.getElementById('chatInput');
+    const _sb = document.getElementById('sendBtn');
+    if (_ci) _ci.disabled = true;
+    if (_sb) _sb.disabled = true;
   }
   log('settings saved', 'ok');
 }
