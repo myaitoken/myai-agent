@@ -105,8 +105,7 @@
     .banner.warn { background: rgba(245, 158, 11, 0.08); border-color: rgba(245, 158, 11, 0.3); color: #fcd34d; }
 
     /* ── grid ── */
-    .grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 1rem; margin-top: 1rem; }
-    @media (max-width: 920px) { .grid { grid-template-columns: 1fr; } }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 1rem; margin-top: 1rem; max-width: 540px; margin-left: auto; margin-right: auto; }
 
     /* ── card ── */
     .card { background: var(--panel); border: 1px solid var(--border); padding: 1.25rem; border-radius: 12px; }
@@ -157,6 +156,20 @@
 
     /* ── stats ── */
     .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+    /* iPhone-friendly: bigger touch targets, no horizontal scroll */
+    @media (max-width: 540px) {
+      .wrap { padding: 1rem 0.75rem; }
+      .card { padding: 1rem; }
+      button.sm, button.ghost, button.danger { padding: 12px 14px; font-size: 0.95rem; }
+      .stats { grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+      .stat { padding: 0.55rem; }
+      h1 { font-size: 1.5rem; }
+      .lede { font-size: 0.92rem; }
+      .nav-links a { font-size: 13px; }
+      .row { grid-template-columns: 1fr; }
+      input, select { font-size: 16px !important; /* prevents iOS zoom on focus */ }
+    }
+
     .stat { background: var(--bg-2); border: 1px solid var(--border); padding: 0.7rem; border-radius: 8px; }
     .stat .v { font-size: 1.15rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
     .stat .l { font-size: 0.65rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 0.2rem; }
@@ -215,35 +228,18 @@
 
 <div class="wrap">
 
-  <h1>Your personal AI agent in a <span class="grad">browser tab</span><span class="pill beta">BETA</span></h1>
+  <h1>Earn MYAI in your <span class="grad">browser tab</span><span class="pill beta">BETA</span></h1>
   <p class="lede">
-    Runs locally on your device's GPU. Chats with you privately. When it can't answer alone,
-    it pays the network in MYAI to get help from a bigger model. When idle, it earns MYAI
-    by helping other agents.
+    Your device joins the MyAi compute network as a worker. We send small jobs
+    (verifier votes, embeddings, page-OCR) to your tab's WebGPU; you get paid in
+    MYAI for each job. Closing the tab stops the node.
   </p>
 
   <div id="gpuBanner" class="banner warn">Checking WebGPU support…</div>
 
   <div class="grid">
 
-    <!-- LEFT: chat -->
-    <div>
-      <div class="card">
-        <h3><span id="dotChat" class="dot"></span>Chat with your agent <span id="modelBadge" class="pill" style="margin-left:auto;">no model loaded</span></h3>
-        <div id="chat"></div>
-        <div class="chat-input-row">
-          <input id="chatInput" placeholder="Ask anything (model loads on first message)…" />
-          <button id="sendBtn">Send</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3><span id="dotLog" class="dot"></span>Agent activity</h3>
-        <div id="log"></div>
-      </div>
-    </div>
-
-    <!-- RIGHT: status + caps + wallet -->
+    <!-- LEFT: status + caps + wallet (chat removed) -->
     <div>
       <div class="card">
         <h3><span id="dotEarn" class="dot"></span>Status</h3>
@@ -312,6 +308,12 @@
         </div>
       </div>
     </div>
+
+    <!-- Agent activity (full width below) -->
+    <div class="card">
+      <h3><span id="dotLog" class="dot"></span>Agent activity</h3>
+      <div id="log"></div>
+    </div>
   </div>
 
   <footer>
@@ -330,10 +332,10 @@
     <div class="field">
       <label for="modelSel">Local model (used by your personal agent + verifier jobs)</label>
       <select id="modelSel">
-        <option value="HuggingFaceTB/SmolLM2-135M-Instruct" data-dtype="q8" data-size="~135MB" data-cpu-ok="1">SmolLM2-135M — tiny, CPU-safe, iPhone/console</option>
+        <option value="HuggingFaceTB/SmolLM2-135M-Instruct" data-dtype="q8" data-size="~135MB" data-cpu-ok="1" selected>SmolLM2-135M — tiny, iPhone-safe (recommended)</option>
         <option value="HuggingFaceTB/SmolLM2-360M-Instruct" data-dtype="q8" data-size="~280MB" data-cpu-ok="1">SmolLM2-360M — fast, low quality</option>
         <option value="onnx-community/Qwen2.5-0.5B-Instruct" data-dtype="q4" data-size="~500MB">Qwen2.5-0.5B — small, decent</option>
-        <option value="onnx-community/Qwen2.5-1.5B-Instruct" data-dtype="q4f16" data-size="~1.1GB" selected>Qwen2.5-1.5B — recommended default</option>
+        <option value="onnx-community/Qwen2.5-1.5B-Instruct" data-dtype="q4f16" data-size="~1.1GB">Qwen2.5-1.5B — desktop only (will OOM iPhone)</option>
         <option value="onnx-community/Llama-3.2-1B-Instruct-q4f16" data-dtype="q4f16" data-size="~0.7GB">Llama-3.2-1B — fast quality</option>
         <option value="onnx-community/Llama-3.2-3B-Instruct" data-dtype="q4f16" data-size="~2.0GB">Llama-3.2-3B — high quality (≥6GB device)</option>
       </select>
@@ -1209,7 +1211,9 @@ async function startWorker() {
   if (STATE.workerActive) return;
   if (!STATE.walletAddress) { log('connect a wallet first', 'warn'); return; }
   log('starting worker…', 'info');
-  try { await ensureTextModel(); } catch (_) { return; }
+  // No mandatory text-model load — earning-only worker. Verifier swarm jobs
+  // will lazy-load SmolLM-135M on demand; transcribe jobs lazy-load TrOCR-small.
+  // Skipping the upfront load saves 200 MB+ of WebGPU memory on iPhone Safari.
   const ok = await registerAgent();
   if (!ok) { log('registration failed; not starting worker', 'err'); return; }
   STATE.workerActive = true;
@@ -1307,7 +1311,7 @@ function bindUI() {
 }
 
 function openSettings() {
-  document.getElementById('modelSel').value = STATE.modelId || 'onnx-community/Qwen2.5-1.5B-Instruct';
+  document.getElementById('modelSel').value = STATE.modelId || 'HuggingFaceTB/SmolLM2-135M-Instruct';
   document.getElementById('displayNameInput').value = STATE.displayName || '';
   document.getElementById('perQueryCap').value = STATE.perQueryCap;
   document.getElementById('dailyCap').value = STATE.dailyCap;
