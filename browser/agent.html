@@ -61,6 +61,11 @@
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { scroll-behavior: smooth; }
+    html, body {
+      overflow-x: hidden;            /* kill any rogue horizontal scroll */
+      width: 100%;
+      max-width: 100vw;
+    }
     body {
       font-family: 'Inter', system-ui, -apple-system, sans-serif;
       background: var(--bg);
@@ -71,6 +76,10 @@
         radial-gradient(circle at 20% 10%, rgba(139, 92, 246, 0.12), transparent 50%),
         radial-gradient(circle at 80% 30%, rgba(34, 211, 238, 0.10), transparent 50%);
     }
+    /* Belt-and-braces: every block-level container respects viewport */
+    nav, .wrap, .grid, .card { max-width: 100%; box-sizing: border-box; }
+    /* Long words / addresses break instead of forcing scroll */
+    .card, .stat, p, h1, h2, h3 { overflow-wrap: anywhere; word-break: break-word; }
 
     /* ── NAV ── */
     nav {
@@ -80,15 +89,17 @@
       border-bottom: 1px solid var(--border);
     }
     .nav-inner {
-      max-width: 1200px; margin: 0 auto; padding: 0 1.5rem;
-      height: 60px; display: flex; align-items: center; justify-content: space-between;
+      max-width: 1200px; margin: 0 auto; padding: 0 1rem;
+      height: 56px; display: flex; align-items: center; justify-content: space-between;
+      gap: 0.5rem;
     }
-    .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); font-weight: 700; }
+    .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); font-weight: 700; white-space: nowrap; min-width: 0; }
+    .logo span { white-space: nowrap; }
     .logo-mark { width: 32px; height: 32px; border-radius: 8px; background: var(--grad); display: grid; place-items: center; color: white; font-weight: 800; font-size: 14px; }
-    .nav-links { display: flex; gap: 1.5rem; align-items: center; }
+    .nav-links { display: flex; gap: 1rem; align-items: center; min-width: 0; flex-shrink: 1; }
     .nav-links a { color: var(--muted); text-decoration: none; font-size: 14px; }
     .nav-links a:hover { color: var(--text); }
-    #installBtn { display: none; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 8px; background: linear-gradient(135deg, #8b5cf6, #22d3ee); border: none; color: white; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    #installBtn { display: none; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px; background: linear-gradient(135deg, #8b5cf6, #22d3ee); border: none; color: white; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
 
     /* ── LAYOUT ── */
     .wrap { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
@@ -206,6 +217,36 @@
 
     .small { font-size: 0.78rem; color: var(--muted); }
     code { font-family: 'JetBrains Mono', monospace; font-size: 0.85em; background: var(--bg-2); padding: 1px 5px; border-radius: 4px; }
+
+    /* Phone-specific (<=540px): hide the marketing nav links so the row fits */
+    @media (max-width: 540px) {
+      .nav-links a { display: none; }                    /* Home / Network / Docs hidden */
+      .nav-links { gap: 0.4rem; }
+      .logo span { font-size: 0.92rem; }
+      .logo-mark { width: 28px; height: 28px; font-size: 12px; }
+      #settingsBtn { padding: 5px 8px !important; font-size: 0.75rem !important; }
+      #installBtn { padding: 5px 10px; font-size: 12px; }
+      h1 { font-size: 1.35rem; line-height: 1.25; }
+      .wrap { padding: 0.75rem; }
+      .card { padding: 0.85rem; }
+      .stats { gap: 0.4rem; }
+      .stat { padding: 0.5rem 0.6rem; }
+      .stat .v { font-size: 1.1rem; }
+      .stat .l { font-size: 0.65rem; }
+      .lede { font-size: 0.88rem; }
+      .banner { font-size: 0.82rem; padding: 0.6rem 0.85rem; }
+      .card h3 { font-size: 0.9rem; }
+      .cap-row { font-size: 0.88rem; }
+      .field input, .field select { font-size: 16px; }  /* prevent iOS zoom */
+      footer { font-size: 0.75rem; padding: 1rem 0.75rem 2rem; }
+    }
+    /* Extra-narrow (<=400px) — iPhone Mini / SE class */
+    @media (max-width: 400px) {
+      .stats { grid-template-columns: 1fr 1fr; }
+      .stat .v { font-size: 1rem; }
+      h1 { font-size: 1.2rem; }
+    }
+
   </style>
 </head>
 <body>
