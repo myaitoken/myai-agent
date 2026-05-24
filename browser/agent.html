@@ -850,10 +850,23 @@ async function collectGpuInfo() {
 async function sendHeartbeat() {
   if (!STATE.agentId) return;
   try {
+    // Resync models[] + capabilities[] on every heartbeat so the coordinator's
+    // gpu_agents row reflects the current local state. Without this the row
+    // could be stuck on stale models from an earlier registration and the
+    // claim_next_job filter would skip newly-added capabilities.
+    const liveModels = (() => {
+      const out = [];
+      if (STATE.modelId) out.push(STATE.modelId);
+      if (STATE.capabilities?.transcribe) out.push('trocr-base-printed');
+      if (STATE.capabilities?.embed)      out.push('bge-small');
+      return out;
+    })();
     const r = await coordPost(`/api/v1/agents/${STATE.agentId}/heartbeat`, {
       gpus: await collectGpuInfo(),
       active_jobs: 0,
       jobs_completed: STATE.jobsDone,
+      models: liveModels,
+      capabilities: Object.keys(STATE.capabilities || {}).filter(k => STATE.capabilities[k]),
     });
     if (r.status >= 400) log(`heartbeat ${r.status}`, 'warn');
   } catch (e) {
