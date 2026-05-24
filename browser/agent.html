@@ -878,16 +878,22 @@ async function pollJobs() {
 }
 
 async function postJobComplete(jobId, result, opts = {}) {
+  // Coordinator stores result as text; if our handler returned an object
+  // (e.g. {text} from transcribe, {embedding} from embed) stringify it so
+  // db.complete_job_chunk's UPDATE doesn't throw on type mismatch.
+  const resultStr = (result == null)
+    ? ''
+    : (typeof result === 'string' ? result : JSON.stringify(result));
   const payload = {
     job_id: jobId,
     agent_id: STATE.agentId,
-    result,
+    result: resultStr,
     success: opts.success !== false,
     completed_at: new Date().toISOString(),
     timing_ms: opts.timing_ms || 0,
     model: STATE.modelId,
   };
-  payload.signature = await signPayload({ jobId, result, ts: payload.completed_at });
+  payload.signature = await signPayload({ jobId, result: resultStr, ts: payload.completed_at });
   const r = await coordPost(`/api/v1/agents/${STATE.agentId}/jobs/${jobId}/complete`, payload);
   return r;
 }
