@@ -982,12 +982,9 @@ async function handleTranscribeJob(job) {
     if (!raw) { out.push({ page: i + 1, text: '', error: 'no image' }); continue; }
     const url = raw.startsWith('data:') ? raw : ('data:image/png;base64,' + raw);
     try {
-      // Florence-2 uses task tokens. <OCR> = plain transcription. <MORE_DETAILED_CAPTION> would describe.
-      const result = await STATE.modelTranscriber(url, { max_new_tokens: 1024, task: '<OCR>' });
-      // Florence-2 output shape: [{ generated_text: '<OCR>actual text here' }] — strip the task token.
-      let text = Array.isArray(result) ? (result[0]?.generated_text || '') : (result?.generated_text || '');
-      text = (text || '').replace(/^<OCR>\s*/i, '').trim();
-      out.push({ page: i + 1, text });
+      const result = await STATE.modelTranscriber(url, { max_new_tokens: 256 });
+      const text = Array.isArray(result) ? (result[0]?.generated_text || '') : (result?.generated_text || '');
+      out.push({ page: i + 1, text: (text || '').trim() });
     } catch (err) {
       out.push({ page: i + 1, text: '', error: err.message });
     }
@@ -1001,14 +998,15 @@ async function ensureTranscriber() {
   if (STATE.modelTranscriber) return;
   log('loading OCR transcriber (TrOCR-base-printed)…', 'info');
   const tjs = await ensureTransformers();
-  // Florence-2-base-ft works reliably with onnxruntime-web on WebGPU; TrOCR ONNX export has a graph bug.
-  // Using <OCR> task token for plain printed text transcription.
-  const modelId = 'onnx-community/Florence-2-base-ft';
-  // Florence-2 wants Florence2ForConditionalGeneration via the image-to-text pipeline.
-  // Use fp32 on wasm if WebGPU not available; fp16 on WebGPU.
+  // Florence-2 isn't yet supported in the latest transformers.js CDN bundle.
+  // Falling back to TrOCR small with WASM backend — the WebGPU backend has a graph-init
+  // bug on the larger TrOCR export, but the small variant + WASM runtime works.
+  const modelId = 'Xenova/trocr-small-printed';
+  // Force WASM backend on TrOCR — its ONNX export has a WebGPU graph-init bug
+  // (subgraph output is outer-scope value, ORT_WebGPU rejects). WASM accepts it.
   STATE.modelTranscriber = await tjs.pipeline('image-to-text', modelId, {
-    device: navigator.gpu ? 'webgpu' : 'wasm',
-    dtype: navigator.gpu ? 'fp16' : 'fp32',
+    device: 'wasm',
+    dtype: 'fp32',
   });
   log('OCR transcriber loaded', 'ok');
 }
