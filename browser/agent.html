@@ -728,18 +728,18 @@ async function ensureTextModel() {
     const modelId = sel.value;
     const dtype = sel.options[sel.selectedIndex].dataset.dtype || 'q4';
     STATE.modelId = modelId;
-    document.getElementById('modelBadge').textContent = 'loading: ' + modelId.split('/').pop();
-    document.getElementById('dotChat').className = 'dot warn';
+    const _mb = document.getElementById('modelBadge'); if (_mb) _mb.textContent = 'loading: ' + modelId.split('/').pop();
+    const _dc = document.getElementById('dotChat'); if (_dc) _dc.className = 'dot warn';
     pushMsg('sys', `Loading ${modelId.split('/').pop()} on your device… first run downloads model weights (~few hundred MB up to ~2 GB depending on choice).`);
     try {
       STATE.modelPipeline = await loadLocalModel(modelId, dtype, 'text-generation');
-      document.getElementById('modelBadge').textContent = modelId.split('/').pop();
-      document.getElementById('dotChat').className = 'dot on';
+      const _mb2 = document.getElementById('modelBadge'); if (_mb2) _mb2.textContent = modelId.split('/').pop();
+      const _dc2 = document.getElementById('dotChat'); if (_dc2) _dc2.className = 'dot on';
       await dbSet('state', 'modelId', modelId);
       return STATE.modelPipeline;
     } catch (e) {
-      document.getElementById('modelBadge').textContent = 'load failed';
-      document.getElementById('dotChat').className = 'dot bad';
+      const _mb3 = document.getElementById('modelBadge'); if (_mb3) _mb3.textContent = 'load failed';
+      const _dc3 = document.getElementById('dotChat'); if (_dc3) _dc3.className = 'dot bad';
       throw e;
     } finally {
       _textModelLoading = null;
@@ -1070,7 +1070,7 @@ function pushMsg(role, content, tier, costMyai) {
   }
   div.innerHTML = `${meta}<div class="bubble"></div>`;
   div.querySelector('.bubble').textContent = content;
-  chat.appendChild(div);
+  if (chat) chat.appendChild(div);
   chat.scrollTop = chat.scrollHeight;
 }
 
@@ -1339,7 +1339,7 @@ async function saveSettings() {
   if (changed && STATE.modelPipeline) {
     log('model changed — reloading on next message', 'mut');
     STATE.modelPipeline = null;
-    document.getElementById('modelBadge').textContent = 'not loaded';
+    const _mb4 = document.getElementById('modelBadge'); if (_mb4) _mb4.textContent = 'not loaded';
     const _ci = document.getElementById('chatInput');
     const _sb = document.getElementById('sendBtn');
     if (_ci) _ci.disabled = true;
