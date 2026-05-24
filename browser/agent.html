@@ -997,7 +997,7 @@ async function handleTranscribeJob(job) {
 async function ensureTranscriber() {
   if (STATE.modelTranscriber) return;
   log('loading OCR transcriber (TrOCR-base-printed)…', 'info');
-  const tjs = await loadTransformersJs();
+  const tjs = await ensureTransformers();
   const modelId = 'Xenova/trocr-base-printed';
   STATE.modelTranscriber = await tjs.pipeline('image-to-text', modelId, {
     device: navigator.gpu ? 'webgpu' : 'wasm',
