@@ -969,7 +969,7 @@ async function handleClassifyJob(job) {
 // Returns either { text: '...' } or { pages: [{ text: '...' }, ...] }.
 async function handleTranscribeJob(job) {
   await ensureTranscriber();
-  const single = job.image_b64 || job.image_url || job.input;
+  const single = job.image_b64 || job.image_url || job.input || job.prompt;
   const pages  = Array.isArray(job.pages) ? job.pages : (single ? [{ image_b64: single }] : []);
   if (pages.length === 0) {
     throw new Error('transcribe: no image_b64 / image_url / pages provided');
