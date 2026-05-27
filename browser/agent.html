@@ -291,6 +291,7 @@
           <div class="stat"><div class="v" id="stSpent">0.000</div><div class="l">MYAI spent</div></div>
           <div class="stat"><div class="v" id="stRep">—</div><div class="l">Reputation</div></div>
           <div class="stat"><div class="v" id="stUp">0s</div><div class="l">Uptime</div></div>
+          <div class="stat" style="grid-column:1/-1"><div class="v" id="stNetModel" style="font-size:0.85rem;">—</div><div class="l">Network model</div></div>
         </div>
         <div class="small" style="margin-top:0.6rem;">
           Spent today: <strong id="spentToday">0.000</strong> / <strong id="dailyCapShow">1.00</strong> MYAI
@@ -404,6 +405,19 @@
       <input id="coordUrl" value="https://api.myaitoken.io" />
     </div>
 
+    <details style="margin-top:0.8rem;">
+      <summary style="cursor:pointer;color:var(--muted);font-size:0.8rem;user-select:none;">Network model override (advanced)</summary>
+      <div class="field" style="margin-top:0.6rem;">
+        <label for="preferredModelSel">Preferred network model</label>
+        <select id="preferredModelSel">
+          <option value="">Auto (coordinator assigns)</option>
+          <option value="Qwen2.5-0.5B-Instruct">Qwen2.5-0.5B-Instruct</option>
+          <option value="Qwen2.5-1.5B-Instruct">Qwen2.5-1.5B-Instruct</option>
+        </select>
+        <p class="small" style="margin-top:0.3rem;">Override the model the coordinator assigns for network jobs. Leave on Auto for load-balanced assignment.</p>
+      </div>
+    </details>
+
     <div style="display:flex;gap:8px;margin-top:1rem;">
       <button id="saveSettingsBtn" class="sm" style="background:var(--grad);color:white;border:none;">Save</button>
       <button id="closeSettingsBtn" class="ghost">Cancel</button>
@@ -516,6 +530,8 @@ const STATE = {
   jobPollHandle: null,
   heartbeatHandle: null,
   audioCtx: null,
+  networkModel: null,           // coordinator-assigned model (task #9084)
+  preferredModel: null,         // user-overridden preferred model sent at registration
 };
 
 // ─── 2. Logging ────────────────────────────────────────────────────────────
@@ -849,6 +865,8 @@ async function registerAgent() {
       return out;
     })(),
     gpus: await collectGpuInfo(),
+    // task #9084: send preferred_model if user has set one
+    ...(STATE.preferredModel ? { preferred_model: STATE.preferredModel } : {}),
   };
   // If we already have agent_secret, attach HMAC triple
   if (STATE.agentId && STATE.agentSecret) {
@@ -870,6 +888,28 @@ async function registerAgent() {
     STATE.agentSecret = data.agent_secret;
     await dbSet('state', 'agentSecret', STATE.agentSecret);
     log('agent_secret persisted', 'mut');
+  }
+  // task #9084: coordinator-assigned model
+  if (data?.assigned_model) {
+    const am = data.assigned_model;
+    STATE.networkModel = am;
+    const stNM = document.getElementById('stNetModel');
+    if (stNM) stNM.textContent = am.split('/').pop();
+    // If no local model selected yet, steer the model selector to match
+    if (!STATE.modelId) {
+      const sel = document.getElementById('modelSel');
+      if (sel) {
+        // Find an option whose value contains the coordinator-assigned short name
+        const shortAm = am.toLowerCase();
+        for (const opt of sel.options) {
+          if (opt.value.toLowerCase().includes(shortAm) || shortAm.includes(opt.value.toLowerCase().split('/').pop())) {
+            sel.value = opt.value;
+            break;
+          }
+        }
+      }
+      log(`coordinator assigned model: ${am}`, 'info');
+    }
   }
   log(`✓ registered as ${STATE.agentId}`, 'ok');
   return true;
@@ -910,8 +950,41 @@ async function sendHeartbeat() {
       jobs_completed: STATE.jobsDone,
       models: liveModels,
       capabilities: Object.keys(STATE.capabilities || {}).filter(k => STATE.capabilities[k]),
+      // task #9084: report currently running model so coordinator can detect drift
+      current_model: STATE.modelId || '',
     });
-    if (r.status >= 400) log(`heartbeat ${r.status}`, 'warn');
+    if (r.status >= 400) { log(`heartbeat ${r.status}`, 'warn'); return; }
+    // task #9084: handle coordinator model control channel
+    const hbData = r.body?.data || r.body || {};
+    if (hbData.assigned_model) {
+      STATE.networkModel = hbData.assigned_model;
+      const stNM = document.getElementById('stNetModel');
+      if (stNM) stNM.textContent = hbData.assigned_model.split('/').pop();
+    }
+    if (hbData.action === 'reload' && !STATE.workerActive) {
+      // Agent is idle — safe to reload with new assigned model
+      log(`coordinator requesting model reload → ${hbData.assigned_model || STATE.networkModel}`, 'info');
+      // Dispose existing pipeline if loaded
+      if (STATE.modelPipeline) {
+        try { await STATE.modelPipeline.dispose?.(); } catch (_) {}
+        STATE.modelPipeline = null;
+      }
+      // Update model state and trigger re-registration so new model is reflected
+      if (hbData.assigned_model) {
+        const sel = document.getElementById('modelSel');
+        if (sel) {
+          const shortAm = hbData.assigned_model.toLowerCase();
+          for (const opt of sel.options) {
+            if (opt.value.toLowerCase().includes(shortAm) || shortAm.includes(opt.value.toLowerCase().split('/').pop())) {
+              sel.value = opt.value;
+              break;
+            }
+          }
+        }
+        STATE.modelId = null; // will be set fresh on next ensureTextModel()
+      }
+      await registerAgent();
+    }
   } catch (e) {
     log('heartbeat error: ' + e.message, 'warn');
   }
@@ -1359,6 +1432,9 @@ function openSettings() {
   document.getElementById('perQueryCap').value = STATE.perQueryCap;
   document.getElementById('dailyCap').value = STATE.dailyCap;
   document.getElementById('coordUrl').value = STATE.coordinator;
+  // task #9084: restore preferred_model selection
+  const _pmSel = document.getElementById('preferredModelSel');
+  if (_pmSel) _pmSel.value = STATE.preferredModel || '';
   document.getElementById('settingsModal').classList.add('show');
 }
 function closeSettings() { document.getElementById('settingsModal').classList.remove('show'); }
@@ -1370,12 +1446,22 @@ async function saveSettings() {
   STATE.perQueryCap = parseFloat(document.getElementById('perQueryCap').value) || 0.10;
   STATE.dailyCap = parseFloat(document.getElementById('dailyCap').value) || 1.00;
   STATE.coordinator = document.getElementById('coordUrl').value.trim() || 'https://api.myaitoken.io';
+  // task #9084: save preferred_model and re-register if it changed
+  const _pmSel2 = document.getElementById('preferredModelSel');
+  const newPref = _pmSel2 ? (_pmSel2.value || null) : null;
+  const prefChanged = newPref !== STATE.preferredModel;
+  STATE.preferredModel = newPref;
   await dbSet('state', 'modelId', STATE.modelId);
   await dbSet('state', 'displayName', STATE.displayName);
   await dbSet('state', 'perQueryCap', STATE.perQueryCap);
   await dbSet('state', 'dailyCap', STATE.dailyCap);
   await dbSet('state', 'coordinator', STATE.coordinator);
+  await dbSet('state', 'preferredModel', STATE.preferredModel || '');
   closeSettings();
+  if (prefChanged && STATE.agentId) {
+    log('preferred model changed — re-registering…', 'mut');
+    await registerAgent();
+  }
   renderStatus();
   if (changed && STATE.modelPipeline) {
     log('model changed — reloading on next message', 'mut');
@@ -1464,6 +1550,7 @@ async function loadState() {
     STATE.perQueryCap = await dbGet('state', 'perQueryCap') || 0.10;
     STATE.dailyCap = await dbGet('state', 'dailyCap') || 1.00;
     STATE.coordinator = await dbGet('state', 'coordinator') || 'https://api.myaitoken.io';
+    STATE.preferredModel = (await dbGet('state', 'preferredModel')) || null;
     STATE.capabilities = (await dbGet('state', 'capabilities')) || STATE.capabilities;
     STATE.spentToday = await dbGet('state', 'spentToday') || 0;
     STATE.spentTodayDay = await dbGet('state', 'spentTodayDay') || null;
