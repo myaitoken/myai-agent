@@ -385,7 +385,7 @@
 
     <div class="field">
       <label>Display name (optional)</label>
-      <input id="displayNameInput" placeholder="browser-anon" />
+      <input id="displayNameInput" placeholder="e.g. Crimson Falcon Brook" />
     </div>
 
     <div class="field">
@@ -502,6 +502,52 @@ async function ensureTransformers() {
   return tjsLoading;
 }
 
+// ── 3-word name generator (deterministic per device fingerprint) ─────────────
+// Produces names like "Crimson Falcon Brook" — friendlier than "browser-anon"
+// or "Unknown" on the network topology. Same fingerprint → same name across
+// reloads, but different browsers get different names.
+const NAME_ADJECTIVES = [
+  "Crimson","Azure","Golden","Silver","Velvet","Quiet","Bright","Dusty","Misty",
+  "Amber","Coral","Cobalt","Indigo","Jade","Emerald","Scarlet","Ivory","Ruby",
+  "Onyx","Pearl","Lunar","Solar","Stellar","Cosmic","Northern","Southern",
+  "Wild","Swift","Bold","Calm","Lone","Restless","Hidden","Distant","Ancient",
+  "Quick","Silent","Vivid","Frozen","Burning","Steady","Drifting","Shimmer",
+];
+const NAME_ANIMALS = [
+  "Falcon","Otter","Heron","Lynx","Fox","Hawk","Raven","Wolf","Owl","Stag",
+  "Bison","Badger","Marten","Mink","Hare","Stoat","Ibis","Egret","Crane","Swan",
+  "Pike","Trout","Salmon","Eel","Manta","Orca","Seal","Walrus","Tern","Plover",
+  "Vulture","Eagle","Kestrel","Osprey","Condor","Heron","Cormorant","Crow",
+];
+const NAME_PLACES = [
+  "Brook","Mesa","Cove","Ridge","Glen","Bluff","Bay","Cape","Reef","Marsh",
+  "Cliff","Shore","Vale","Heath","Moor","Spring","Plain","Hollow","Grove",
+  "Creek","Hill","Wood","Field","Knoll","Crag","Fjord","Inlet","Strait",
+  "Mead","Fen","Dale","Wold","Glade","Ford","Pier","Pond","Lagoon","Mire",
+];
+
+function _hashStrToInt(s) {
+  // Small non-crypto hash, deterministic. ~32-bit.
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (h ^ s.charCodeAt(i)) >>> 0;
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h;
+}
+
+function generateThreeWordName(seed) {
+  // seed: any string (fingerprint, wallet, agentId). Three derived indices.
+  const h1 = _hashStrToInt(seed + ":adj");
+  const h2 = _hashStrToInt(seed + ":animal");
+  const h3 = _hashStrToInt(seed + ":place");
+  return [
+    NAME_ADJECTIVES[h1 % NAME_ADJECTIVES.length],
+    NAME_ANIMALS[h2 % NAME_ANIMALS.length],
+    NAME_PLACES[h3 % NAME_PLACES.length],
+  ].join(" ");
+}
+
 const STATE = {
   agentId: null,
   agentSecret: null,
@@ -524,7 +570,7 @@ const STATE = {
   earned: 0.0,
   jobsDone: 0,
   reputation: null,
-  displayName: 'browser-anon',
+  displayName: null,  // computed at boot from fingerprint (3-word name)
   startedAt: null,
   chatHistory: [],
   jobPollHandle: null,
@@ -1442,7 +1488,16 @@ async function saveSettings() {
   const newModel = document.getElementById('modelSel').value;
   const changed = newModel !== STATE.modelId;
   STATE.modelId = newModel;
-  STATE.displayName = document.getElementById('displayNameInput').value.trim() || 'browser-anon';
+  const _val = document.getElementById('displayNameInput').value.trim();
+  if (_val) {
+    STATE.displayName = _val;
+  } else if (!STATE.displayName) {
+    // Field cleared and we never had a name: regenerate from fingerprint
+    try {
+      const fp = await deviceFingerprint();
+      STATE.displayName = generateThreeWordName(fp);
+    } catch { STATE.displayName = 'browser-anon'; }
+  }
   STATE.perQueryCap = parseFloat(document.getElementById('perQueryCap').value) || 0.10;
   STATE.dailyCap = parseFloat(document.getElementById('dailyCap').value) || 1.00;
   STATE.coordinator = document.getElementById('coordUrl').value.trim() || 'https://api.myaitoken.io';
@@ -1546,7 +1601,15 @@ async function loadState() {
     STATE.agentId = await dbGet('state', 'agentId') || null;
     STATE.agentSecret = await dbGet('state', 'agentSecret') || null;
     STATE.modelId = await dbGet('state', 'modelId') || 'onnx-community/Qwen2.5-1.5B-Instruct';
-    STATE.displayName = await dbGet('state', 'displayName') || 'browser-anon';
+    STATE.displayName = await dbGet('state', 'displayName') || null;
+    if (!STATE.displayName) {
+      // First time on this device: compute from fingerprint, persist.
+      try {
+        const fp = await deviceFingerprint();
+        STATE.displayName = generateThreeWordName(fp);
+        await dbSet('state', 'displayName', STATE.displayName);
+      } catch { STATE.displayName = 'browser-anon'; }
+    }
     STATE.perQueryCap = await dbGet('state', 'perQueryCap') || 0.10;
     STATE.dailyCap = await dbGet('state', 'dailyCap') || 1.00;
     STATE.coordinator = await dbGet('state', 'coordinator') || 'https://api.myaitoken.io';
