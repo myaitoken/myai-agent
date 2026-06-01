@@ -8,7 +8,7 @@ name: mirror agent.html
 on:
   push:
     branches: [main]
-    paths: ['browser/agent.html']
+    paths: ['browser/agent.html', 'browser/sw.js']
   workflow_dispatch: {}
 
 concurrency:
@@ -37,16 +37,17 @@ jobs:
         id: commit
         run: |
           cp src/browser/agent.html target/agent.html
+          cp src/browser/sw.js      target/sw.js
           cd target
-          if git diff --quiet -- agent.html; then
-            echo "no change in agent.html — skipping commit"
+          if git diff --quiet -- agent.html sw.js; then
+            echo "no change in agent.html / sw.js — skipping commit"
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git config user.name  "myai-agent mirror bot"
           git config user.email "ci@infinihash.com"
-          git add agent.html
-          git commit -m "mirror(agent.html): from myaitoken/myai-agent@${GITHUB_SHA::7}"
+          git add agent.html sw.js
+          git commit -m "mirror(agent.html,sw.js): from myaitoken/myai-agent@${GITHUB_SHA::7}"
           git push origin master
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
