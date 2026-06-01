@@ -1227,6 +1227,7 @@ function extractGenText(out) {
 
 function pushMsg(role, content, tier, costMyai) {
   const chat = document.getElementById('chat');
+  if (!chat) return;  // chat UI removed — no-op (and never abort the bootstrap chain)
   const div = document.createElement('div');
   div.className = 'msg ' + role;
   let meta = '';
