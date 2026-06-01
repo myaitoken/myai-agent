@@ -327,12 +327,19 @@
       </div>
 
       <div class="card">
-        <h3><span id="dotWallet" class="dot"></span>Wallet</h3>
+        <h3><span id="dotWallet" class="dot"></span>Earnings &amp; cash-out</h3>
         <div id="walletEmpty">
-          <p class="small" style="margin-bottom:0.6rem;">No wallet yet. Earnings need somewhere to go.</p>
-          <button id="createWalletBtn" class="sm" style="background:var(--grad);color:white;border:none;">🔵 Create Smart Wallet (free)</button>
-          <p class="small" style="margin-top:0.5rem;">No seed phrase · passkey-secured · Base network</p>
-          <p class="small" style="margin-top:0.3rem;"><a href="#" id="useExistingWalletLink" style="color:var(--accent);">I have my own wallet</a></p>
+          <p class="small" style="margin-bottom:0.6rem;">⚡ You're earning anonymously on this device — <strong id="claimAmt">0.000 MYAI</strong> ready to claim.</p>
+          <button id="claimSignInBtn" class="sm" style="background:var(--grad);color:white;border:none;">Sign in to MyAi to claim</button>
+          <p class="small" style="margin-top:0.5rem;color:var(--muted);">No wallet needed to earn. You only sign in when you want to cash out.</p>
+          <details style="margin-top:0.6rem;">
+            <summary class="small" style="cursor:pointer;color:var(--muted);">Advanced: pay out to a crypto wallet directly</summary>
+            <div style="margin-top:0.5rem;">
+              <button id="createWalletBtn" class="sm" style="background:var(--grad);color:white;border:none;">🔵 Create Smart Wallet (free)</button>
+              <p class="small" style="margin-top:0.5rem;">No seed phrase · passkey-secured · Base network</p>
+              <p class="small" style="margin-top:0.3rem;"><a href="#" id="useExistingWalletLink" style="color:var(--accent);">I have my own wallet</a></p>
+            </div>
+          </details>
         </div>
         <div id="walletConnected" style="display:none;">
           <div class="addr" id="walletAddr"></div>
@@ -552,6 +559,7 @@ const STATE = {
   agentId: null,
   agentSecret: null,
   walletAddress: null,
+  sessionId: null,             // anonymous device session — earns with NO wallet; claimed at MyAi sign-in
   attestationKey: null,        // CryptoKeyPair for ECDSA
   attestationPubJwk: null,     // exportable public JWK
   deviceFingerprint: null,
@@ -883,10 +891,10 @@ async function coordGet(path) {
 }
 
 async function registerAgent() {
-  if (!STATE.walletAddress) {
-    log('register skipped: no wallet', 'warn');
-    return false;
-  }
+  // Anonymous-first: a wallet is NOT required to start earning. Earnings accrue
+  // to the anonymous device session (STATE.sessionId) and are claimed later by
+  // signing in to MyAi. A wallet, if the user added one, rides along as an
+  // optional payout hint only.
   await ensureAttestationKey();
   const fp = await deviceFingerprint();
   STATE.agentId = STATE.agentId || (await dbGet('state', 'agentId')) || null;
@@ -897,7 +905,8 @@ async function registerAgent() {
     name: STATE.displayName || ('browser-' + fp.slice(0, 8)),
     platform: 'browser-webgpu',
     tier: 'consumer',
-    wallet_address: STATE.walletAddress,
+    session_id: STATE.sessionId,
+    ...(STATE.walletAddress ? { wallet_address: STATE.walletAddress } : {}),
     device_fingerprint: fp,
     attestation_pubkey: STATE.attestationPubJwk,
     capabilities: Object.keys(STATE.capabilities).filter(k => STATE.capabilities[k]),
@@ -1354,6 +1363,7 @@ function renderStatus() {
   document.getElementById('stState').textContent = STATE.workerActive ? 'earning' : 'idle';
   document.getElementById('stJobs').textContent = STATE.jobsDone;
   document.getElementById('stEarn').textContent = STATE.earned.toFixed(3);
+  const _ca = document.getElementById('claimAmt'); if (_ca) _ca.textContent = STATE.earned.toFixed(3) + ' MYAI';
   document.getElementById('stSpent').textContent = STATE.spentToday.toFixed(3);
   document.getElementById('stRep').textContent = STATE.reputation == null ? '—' : STATE.reputation.toFixed(2);
   document.getElementById('spentToday').textContent = STATE.spentToday.toFixed(3);
@@ -1367,9 +1377,20 @@ function formatUptime(s) {
   return Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm';
 }
 
+// Cash-out path: defer identity to the very end. Send the user to MyAi sign-in,
+// carrying the anonymous session id so the signed-in account can claim its
+// accrued earnings (server merges session → account; a payout wallet is only
+// attached at withdrawal). Returns here afterward.
+function claimWithMyAi() {
+  const ret = encodeURIComponent(location.origin + '/agent.html?claimed=1');
+  const sid = encodeURIComponent(STATE.sessionId || '');
+  // MyAi sign-in is fronted by the website; it round-trips back with the claim done.
+  location.href = `https://myaitoken.io/login?claim_session=${sid}&return=${ret}`;
+}
+
 async function startWorker() {
   if (STATE.workerActive) return;
-  if (!STATE.walletAddress) { log('connect a wallet first', 'warn'); return; }
+  // Anonymous-first: no wallet needed to start. Earnings accrue to STATE.sessionId.
   log('starting worker…', 'info');
   // No mandatory text-model load — earning-only worker. Verifier swarm jobs
   // will lazy-load SmolLM-135M on demand; transcribe jobs lazy-load TrOCR-small.
@@ -1420,6 +1441,8 @@ function bindUI() {
   document.getElementById('startBtn').addEventListener('click', startWorker);
   document.getElementById('stopBtn').addEventListener('click', stopWorker);
 
+  const _claimBtn = document.getElementById('claimSignInBtn');
+  if (_claimBtn) _claimBtn.addEventListener('click', claimWithMyAi);
   document.getElementById('createWalletBtn').addEventListener('click', createSmartWallet);
   document.getElementById('useExistingWalletLink').addEventListener('click', (e) => {
     e.preventDefault();
@@ -1598,6 +1621,13 @@ async function checkWebGPU() {
 async function loadState() {
   try {
     STATE.walletAddress = await dbGet('state', 'walletAddress') || null;
+    STATE.sessionId = await dbGet('state', 'sessionId') || null;
+    if (!STATE.sessionId) {
+      // First run on this device: mint a stable anonymous earning identity.
+      STATE.sessionId = 'sess_' + ((crypto.randomUUID && crypto.randomUUID()) ||
+        (Date.now().toString(36) + Math.random().toString(36).slice(2, 12)));
+      await dbSet('state', 'sessionId', STATE.sessionId);
+    }
     STATE.agentId = await dbGet('state', 'agentId') || null;
     STATE.agentSecret = await dbGet('state', 'agentSecret') || null;
     STATE.modelId = await dbGet('state', 'modelId') || 'onnx-community/Qwen2.5-1.5B-Instruct';
@@ -1646,9 +1676,12 @@ async function loadState() {
   // Greet
   pushMsg('sys', 'Hi! I\'m your personal AI agent running on this device. Ask me anything. I\'ll answer locally when I can, and ask the network for help on harder questions (within your spending limits).');
 
-  // Auto-start if URL hint
-  if (new URLSearchParams(location.search).has('autostart')) {
-    setTimeout(() => startWorker().catch(() => {}), 500);
+  // Auto-start: the moment WebGPU (or wasm fallback) is ready, begin earning —
+  // no wallet, no button click. Earnings accrue anonymously to this device's
+  // session and can be claimed by signing in to MyAi. Opt out with ?autostart=0.
+  const optedOut = new URLSearchParams(location.search).get('autostart') === '0';
+  if (!optedOut) {
+    setTimeout(() => startWorker().catch(e => log('auto-start failed: ' + e.message, 'warn')), 400);
   }
 })();
 </script>
