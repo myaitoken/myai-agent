@@ -39,14 +39,17 @@ jobs:
           cp src/browser/agent.html target/agent.html
           cp src/browser/sw.js      target/sw.js
           cd target
-          if git diff --quiet -- agent.html sw.js; then
+          git config user.name  "myai-agent mirror bot"
+          git config user.email "ci@infinihash.com"
+          # Stage first, then check the staged diff — `git diff` (unstaged) does
+          # NOT detect newly-created files like a first-time sw.js, which would
+          # make a real change look like "no change" and skip the deploy.
+          git add agent.html sw.js
+          if git diff --cached --quiet -- agent.html sw.js; then
             echo "no change in agent.html / sw.js — skipping commit"
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          git config user.name  "myai-agent mirror bot"
-          git config user.email "ci@infinihash.com"
-          git add agent.html sw.js
           git commit -m "mirror(agent.html,sw.js): from myaitoken/myai-agent@${GITHUB_SHA::7}"
           git push origin master
           echo "changed=true" >> "$GITHUB_OUTPUT"
