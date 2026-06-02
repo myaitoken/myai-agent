@@ -1400,6 +1400,7 @@ async function startWorker() {
   // so it joins even if register/CORS fails. Anti-throttle keeps timers alive
   // when the tab is backgrounded.
   enableAntiThrottle();
+  acquireWakeLock();
   try { swarmConnect(); } catch (e) { log('swarm connect error: ' + (e && e.message || e), 'warn'); }
 
   // HTTP earning path (verify / embed / transcribe job polling).
@@ -1434,6 +1435,7 @@ function stopWorker() {
   document.getElementById('dotEarn').className = 'dot';
   document.getElementById('dotCaps').className = 'dot';
   disableAntiThrottle();
+  releaseWakeLock();
   try { swarmDisconnect(); } catch (_) {}
   renderStatus();
   log('worker stopped', 'mut');
@@ -1591,10 +1593,29 @@ function disableAntiThrottle() {
   } catch {}
 }
 
-// Page visibility — reduce polling when hidden, restore when visible
+// Screen Wake Lock — keep the screen on (and the tab visible) while earning so
+// the node stays foreground-eligible. The browser releases it automatically when
+// the tab is hidden; we re-acquire on return. iOS 16.4+ Safari / Android Chrome.
+async function acquireWakeLock() {
+  try {
+    if (!('wakeLock' in navigator) || STATE.wakeLock) return;
+    STATE.wakeLock = await navigator.wakeLock.request('screen');
+    log('screen wake lock on — tab stays awake while earning', 'mut');
+    STATE.wakeLock.addEventListener('release', () => { STATE.wakeLock = null; });
+  } catch (e) {
+    log('wake lock unavailable: ' + (e && e.message || e), 'warn');
+  }
+}
+async function releaseWakeLock() {
+  try { if (STATE.wakeLock) { await STATE.wakeLock.release(); STATE.wakeLock = null; } } catch {}
+}
+
+// Page visibility — restore polling + re-arm the wake lock when the tab returns
+// to the foreground (the wake lock is dropped automatically while hidden).
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && STATE.workerActive) {
     pollJobs(); sendHeartbeat();
+    acquireWakeLock();
   }
 });
 
