@@ -1409,6 +1409,7 @@ async function startWorker() {
   await sendHeartbeat();
   await pollJobs();
   enableAntiThrottle();
+  try { swarmConnect(); } catch (e) { log('swarm connect error: ' + e.message, 'warn'); }
   renderStatus();
   log('worker active — polling for jobs', 'ok');
 }
@@ -1423,6 +1424,7 @@ function stopWorker() {
   document.getElementById('dotEarn').className = 'dot';
   document.getElementById('dotCaps').className = 'dot';
   disableAntiThrottle();
+  try { swarmDisconnect(); } catch (_) {}
   renderStatus();
   log('worker stopped', 'mut');
 }
@@ -1618,6 +1620,139 @@ async function checkWebGPU() {
 }
 
 // ─── 12. Bootstrap ─────────────────────────────────────────────────────────
+
+// ─── 11c. WebGPU swarm: WebLLM chat generation over /ws/swarm ──────────────
+// Joins the coordinator's live WebSocket swarm as a generation node and serves
+// `generate` ops with in-browser WebLLM (MLC). Runs ALONGSIDE the HTTP earning
+// worker above and shares the same anonymous STATE.sessionId, so any MYAI minted
+// for served generations is claimable at the same MyAi sign-in. Purely additive —
+// never blocks or alters the existing earn / wallet / job-poll paths.
+const SWARM = { ws: null, hb: null, agentId: null, webllm: null, engines: new Map(), loading: new Map() };
+const SWARM_WEBLLM_URL = 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm/+esm';
+
+function swarmWsUrl() {
+  try { return (STATE.coordinator || 'https://api.myaitoken.io').replace(/^http/, 'ws').replace(/\/+$/, '') + '/ws/swarm'; }
+  catch { return 'wss://api.myaitoken.io/ws/swarm'; }
+}
+function swarmTier() {
+  const gb = navigator.deviceMemory || 4;
+  const vramMb = Math.floor(gb * 1024 * 0.25);
+  if (vramMb < 1024) return 'phone';
+  if (vramMb < 3072) return 'laptop';
+  return 'desktop';
+}
+function swarmModels(tier) {
+  const small = ['Qwen2.5-0.5B-Instruct-q4f16_1-MLC', 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC'];
+  if (tier === 'phone')  return small.concat(['Llama-3.2-1B-Instruct-q4f16_1-MLC']);
+  if (tier === 'laptop') return small.concat(['Phi-3.5-mini-instruct-q4f16_1-MLC']);
+  return small.concat(['Llama-3.1-8B-Instruct-q4f16_1-MLC', 'Qwen2.5-7B-Instruct-q4f16_1-MLC']);
+}
+function swarmEligibility() {
+  const fg = (typeof document === 'undefined') || document.visibilityState === 'visible';
+  const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+  // Foreground is the gate. The silent-audio anti-throttle keeps timers alive
+  // when backgrounded, but we still report not-eligible when hidden so the
+  // coordinator won't route generation to a tab that can't reliably run it.
+  return { is_mobile: isMobile, foreground: fg, thermal_ok: true, consent: true, charging: true, unmetered: true, eligible: fg };
+}
+async function swarmEnsureWebllm() {
+  if (!SWARM.webllm) SWARM.webllm = await import(/* @vite-ignore */ SWARM_WEBLLM_URL);
+  return SWARM.webllm;
+}
+async function swarmEnsureEngine(modelId) {
+  if (SWARM.engines.has(modelId)) return SWARM.engines.get(modelId);
+  if (SWARM.loading.has(modelId)) return SWARM.loading.get(modelId);
+  const p = (async () => {
+    const w = await swarmEnsureWebllm();
+    log('swarm: loading ' + modelId + ' (WebLLM)…', 'info');
+    const engine = await w.CreateMLCEngine(modelId, {
+      initProgressCallback: (r) => { try { if (window.__mlcProgress) window.__mlcProgress(r); } catch (_) {} },
+    });
+    SWARM.engines.set(modelId, engine);
+    SWARM.loading.delete(modelId);
+    log('swarm: ' + modelId + ' ready on WebGPU', 'ok');
+    return engine;
+  })();
+  SWARM.loading.set(modelId, p);
+  return p;
+}
+async function swarmGenerate(model, messages, params, onTok) {
+  const engine = await swarmEnsureEngine(model);
+  const stream = !!onTok;
+  const res = await engine.chat.completions.create({
+    messages, stream,
+    temperature: (params && params.temperature != null) ? params.temperature : 0.7,
+    max_tokens: (params && params.max_tokens) ? params.max_tokens : 256,
+  });
+  if (!stream) return (res && res.choices && res.choices[0] && res.choices[0].message.content) || '';
+  let full = '';
+  for await (const c of res) {
+    const t = (c && c.choices && c.choices[0] && c.choices[0].delta && c.choices[0].delta.content) || '';
+    if (t) { full += t; onTok(t); }
+  }
+  return full;
+}
+function swarmSend(o) { if (SWARM.ws && SWARM.ws.readyState === WebSocket.OPEN) { try { SWARM.ws.send(JSON.stringify(o)); } catch (_) {} } }
+async function swarmHandleGenerate(msg) {
+  const t0 = performance.now();
+  let messages = msg.messages; if (!messages && msg.prompt) messages = [{ role: 'user', content: msg.prompt }];
+  try {
+    if (msg.stream) {
+      await swarmGenerate(msg.model, messages || [], msg.params || {}, (tok) => swarmSend({ op: 'generate.token', req_id: msg.req_id, tok }));
+      swarmSend({ op: 'generate.done', req_id: msg.req_id, t_ms: Math.round(performance.now() - t0) });
+    } else {
+      const out = await swarmGenerate(msg.model, messages || [], msg.params || {});
+      swarmSend({ op: 'generate.ok', req_id: msg.req_id, text: out, t_ms: Math.round(performance.now() - t0) });
+    }
+    STATE.jobsDone += 1; renderStatus();
+    log('swarm: served generate (' + String(msg.model || '?').split('/').pop() + ')', 'ok');
+  } catch (e) {
+    log('swarm: generate failed: ' + (e && e.message || e), 'warn');
+    swarmSend({ op: msg.stream ? 'generate.stream_err' : 'generate.err', req_id: msg.req_id, err: String(e).slice(0, 200) });
+  }
+}
+function swarmStartHeartbeat() {
+  swarmStopHeartbeat();
+  SWARM.hb = setInterval(() => {
+    swarmSend({ op: 'heartbeat', eligibility: swarmEligibility(), models_ready: [...SWARM.engines.keys()] });
+  }, 5000);
+}
+function swarmStopHeartbeat() { if (SWARM.hb) { clearInterval(SWARM.hb); SWARM.hb = null; } }
+function swarmConnect() {
+  if (SWARM.ws) return;
+  if (!('gpu' in navigator)) { log('swarm: WebGPU unavailable — generation tier disabled', 'mut'); return; }
+  const url = swarmWsUrl();
+  let ws;
+  try { ws = new WebSocket(url, ['Bearer', STATE.sessionId || 'anon']); }
+  catch (e) { log('swarm: connect failed: ' + e.message, 'warn'); return; }
+  SWARM.ws = ws;
+  ws.addEventListener('open', () => {
+    const tier = swarmTier();
+    swarmSend({
+      op: 'capabilities', runtime: 'webgpu', tier_hint: tier, gpu_name: 'webgpu',
+      vram_mb: 0, max_shards: 1, rtt_anchor_ms: 0, user_agent: navigator.userAgent,
+      eligibility: swarmEligibility(), webllm_models: swarmModels(tier),
+      models_ready: [...SWARM.engines.keys()],
+    });
+    swarmStartHeartbeat();
+    log('swarm: joined /ws/swarm as a generation node', 'ok');
+  });
+  ws.addEventListener('message', async (evt) => {
+    let m; try { m = JSON.parse(evt.data); } catch (_) { return; }
+    if (m.op === 'hello.ack') { SWARM.agentId = m.agent_id; return; }
+    if (m.op === 'generate') { await swarmHandleGenerate(m); return; }
+    // forward / load_shards / probe are for the model-parallel tier — ignored here.
+  });
+  ws.addEventListener('close', () => {
+    swarmStopHeartbeat(); SWARM.ws = null;
+    if (STATE.workerActive) setTimeout(() => { try { swarmConnect(); } catch (_) {} }, 5000);
+  });
+  ws.addEventListener('error', () => {});
+}
+function swarmDisconnect() {
+  swarmStopHeartbeat();
+  if (SWARM.ws) { try { SWARM.ws.close(); } catch (_) {} SWARM.ws = null; }
+}
 
 async function loadState() {
   try {
