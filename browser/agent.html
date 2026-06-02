@@ -1396,20 +1396,30 @@ async function startWorker() {
   // No mandatory text-model load — earning-only worker. Verifier swarm jobs
   // will lazy-load SmolLM-135M on demand; transcribe jobs lazy-load TrOCR-small.
   // Skipping the upfront load saves 200 MB+ of WebGPU memory on iPhone Safari.
-  const ok = await registerAgent();
-  if (!ok) { log('registration failed; not starting worker', 'err'); return; }
+  // Generation tier (WebSocket swarm) — independent of the HTTP register path,
+  // so it joins even if register/CORS fails. Anti-throttle keeps timers alive
+  // when the tab is backgrounded.
+  enableAntiThrottle();
+  try { swarmConnect(); } catch (e) { log('swarm connect error: ' + (e && e.message || e), 'warn'); }
+
+  // HTTP earning path (verify / embed / transcribe job polling).
+  let ok = false;
+  try { ok = await registerAgent(); } catch (e) { log('register error: ' + (e && e.message || e), 'warn'); }
   STATE.workerActive = true;
   STATE.startedAt = Date.now();
   document.getElementById('startBtn').disabled = true;
   document.getElementById('stopBtn').disabled = false;
   document.getElementById('dotEarn').className = 'dot on';
+  if (!ok) {
+    log('HTTP register unavailable — running generation-only via the swarm', 'warn');
+    renderStatus();
+    return;
+  }
   document.getElementById('dotCaps').className = 'dot on';
   STATE.jobPollHandle = setInterval(pollJobs, 5000);
   STATE.heartbeatHandle = setInterval(sendHeartbeat, 30000);
   await sendHeartbeat();
   await pollJobs();
-  enableAntiThrottle();
-  try { swarmConnect(); } catch (e) { log('swarm connect error: ' + e.message, 'warn'); }
   renderStatus();
   log('worker active — polling for jobs', 'ok');
 }
