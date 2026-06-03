@@ -1831,9 +1831,12 @@ function swarmConnect() {
   SWARM.ws = ws;
   ws.addEventListener('open', () => {
     const tier = swarmTier();
+    // Report a real VRAM estimate (>256MB) so the coordinator actually pushes
+    // the embed shard — shards_for_new_agent skips nodes reporting <256.
+    const vramMb = Math.max(512, Math.floor((navigator.deviceMemory || 4) * 1024 * 0.25));
     swarmSend({
       op: 'capabilities', runtime: 'webgpu', tier_hint: tier, gpu_name: 'webgpu',
-      vram_mb: 0, max_shards: 1, rtt_anchor_ms: 0, user_agent: navigator.userAgent,
+      vram_mb: vramMb, max_shards: 1, rtt_anchor_ms: 0, user_agent: navigator.userAgent,
       eligibility: swarmEligibility(), webllm_models: swarmModels(tier),
       models_ready: [...SWARM.engines.keys()], loaded_shards: [...SWARM.shards.keys()],
     });
