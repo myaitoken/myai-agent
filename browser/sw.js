@@ -6,7 +6,7 @@
 //   • HuggingFace model weights (large binary blobs): let the browser's own cache handle them
 //   • Offline: serve cached shell with an offline overlay
 
-const CACHE_VERSION = 'myai-agent-v3';
+const CACHE_VERSION = 'myai-agent-v4';
 const API_ORIGINS = [
   'api.myaitoken.io',
   'api.infinihash.com',

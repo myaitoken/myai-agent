@@ -1692,6 +1692,32 @@ function _swarmF32ToB64(arr) {
   for (let i = 0; i < b.length; i += C) s += String.fromCharCode.apply(null, b.subarray(i, i + C));
   return btoa(s);
 }
+// Dedicated transformers.js for the swarm embed shard. Pinned to a recent build
+// (3.8.1) whose ORT-web fixes iOS Safari backend init — the old 3.0.0 used by the
+// HTTP-worker path fails on Safari ("webgpuInit is not a function" / no wasm backend).
+// Isolated here so the proven desktop/HTTP paths keep using 3.0.0 untouched.
+const SWARM_TJS_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/+esm';
+let _swarmTjs = null;
+async function swarmEnsureTransformers() {
+  if (_swarmTjs) return _swarmTjs;
+  _swarmTjs = await import(/* @vite-ignore */ SWARM_TJS_URL);
+  try {
+    if (_swarmTjs.env) {
+      _swarmTjs.env.allowLocalModels = false;
+      _swarmTjs.env.useBrowserCache = true;
+      // Safari is unhappy with multi-threaded wasm (SharedArrayBuffer quirks) —
+      // single thread is the most compatible.
+      if (_swarmTjs.env.backends && _swarmTjs.env.backends.onnx && _swarmTjs.env.backends.onnx.wasm) {
+        _swarmTjs.env.backends.onnx.wasm.numThreads = 1;
+      }
+    }
+  } catch (_) {}
+  return _swarmTjs;
+}
+function _swarmIsIOS() {
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent || '')
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
 const SWARM_WEBLLM_URL = 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm/+esm';
 
 function swarmWsUrl() {
@@ -1785,11 +1811,17 @@ async function swarmHandleLoadShards(msg) {
     try {
       const kind = spec.shard_kind || (String(spec.shard_id || '').endsWith(':embed') ? 'embed' : 'unknown');
       if (kind !== 'embed') { swarmSend({ op: 'shard.loaded', shard_id: spec.shard_id, sha256_ok: false, load_ms: 0 }); continue; }
-      const tjs = await ensureTransformers();
+      const tjs = await swarmEnsureTransformers();
       const modelId = spec.model_id_override || 'Xenova/all-MiniLM-L6-v2';
       let pipe;
-      try { pipe = await tjs.pipeline('feature-extraction', modelId, { device: 'webgpu', dtype: 'fp32' }); }
-      catch (_) { pipe = await tjs.pipeline('feature-extraction', modelId, { device: 'wasm', dtype: 'fp32' }); }
+      if (_swarmIsIOS()) {
+        // iOS Safari's WebGPU execution provider is broken in ORT-web; go straight to WASM.
+        pipe = await tjs.pipeline('feature-extraction', modelId, { device: 'wasm', dtype: 'fp32' });
+        log('swarm: embed on WASM (iOS Safari path)', 'mut');
+      } else {
+        try { pipe = await tjs.pipeline('feature-extraction', modelId, { device: 'webgpu', dtype: 'fp32' }); }
+        catch (_) { pipe = await tjs.pipeline('feature-extraction', modelId, { device: 'wasm', dtype: 'fp32' }); }
+      }
       SWARM.shards.set(spec.shard_id, pipe);
       swarmSend({ op: 'shard.loaded', shard_id: spec.shard_id, sha256_ok: true, load_ms: Math.round(performance.now() - t0) });
       log('swarm: embed shard ready (' + modelId.split('/').pop() + ')', 'ok');
