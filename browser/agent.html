@@ -1685,7 +1685,13 @@ async function checkWebGPU() {
 // worker above and shares the same anonymous STATE.sessionId, so any MYAI minted
 // for served generations is claimable at the same MyAi sign-in. Purely additive —
 // never blocks or alters the existing earn / wallet / job-poll paths.
-const SWARM = { ws: null, hb: null, agentId: null, webllm: null, engines: new Map(), loading: new Map() };
+const SWARM = { ws: null, hb: null, agentId: null, webllm: null, engines: new Map(), loading: new Map(), shards: new Map() };
+function _swarmF32ToB64(arr) {
+  const b = new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength);
+  let s = ''; const C = 0x8000;
+  for (let i = 0; i < b.length; i += C) s += String.fromCharCode.apply(null, b.subarray(i, i + C));
+  return btoa(s);
+}
 const SWARM_WEBLLM_URL = 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm/+esm';
 
 function swarmWsUrl() {
@@ -1769,10 +1775,49 @@ async function swarmHandleGenerate(msg) {
     swarmSend({ op: msg.stream ? 'generate.stream_err' : 'generate.err', req_id: msg.req_id, err: String(e).slice(0, 200) });
   }
 }
+// Embedding tier over /ws/swarm: the coordinator pushes an embed shard on
+// capabilities (load_shards) and dispatches embed jobs as `forward` ops. We run
+// a real MiniLM feature-extraction pipeline (transformers.js) — the small, fast
+// workload that suits phones. Mirrors the canonical webgpu_runtime embed path.
+async function swarmHandleLoadShards(msg) {
+  for (const spec of (msg.shards || [])) {
+    const t0 = performance.now();
+    try {
+      const kind = spec.shard_kind || (String(spec.shard_id || '').endsWith(':embed') ? 'embed' : 'unknown');
+      if (kind !== 'embed') { swarmSend({ op: 'shard.loaded', shard_id: spec.shard_id, sha256_ok: false, load_ms: 0 }); continue; }
+      const tjs = await ensureTransformers();
+      const modelId = spec.model_id_override || 'Xenova/all-MiniLM-L6-v2';
+      let pipe;
+      try { pipe = await tjs.pipeline('feature-extraction', modelId, { device: 'webgpu', dtype: 'fp32' }); }
+      catch (_) { pipe = await tjs.pipeline('feature-extraction', modelId, { device: 'wasm', dtype: 'fp32' }); }
+      SWARM.shards.set(spec.shard_id, pipe);
+      swarmSend({ op: 'shard.loaded', shard_id: spec.shard_id, sha256_ok: true, load_ms: Math.round(performance.now() - t0) });
+      log('swarm: embed shard ready (' + modelId.split('/').pop() + ')', 'ok');
+    } catch (e) {
+      swarmSend({ op: 'shard.loaded', shard_id: spec.shard_id, sha256_ok: false, load_ms: 0 });
+      log('swarm: embed shard load failed: ' + (e && e.message || e), 'warn');
+    }
+  }
+}
+async function swarmHandleForward(msg) {
+  const t0 = performance.now();
+  try {
+    const pipe = SWARM.shards.get(msg.shard_id);
+    if (!pipe) { swarmSend({ op: 'forward.err', req_id: msg.req_id, err: 'miss' }); return; }
+    const text = (msg.meta && msg.meta.text) || '';
+    const out = await pipe(text, { pooling: 'mean', normalize: true });
+    const arr = out.data instanceof Float32Array ? out.data : new Float32Array(out.data);
+    swarmSend({ op: 'forward.ok', req_id: msg.req_id, out: _swarmF32ToB64(arr), t_ms: Math.round(performance.now() - t0) });
+    STATE.jobsDone += 1; renderStatus();
+    log('swarm: served embedding (' + arr.length + 'd)', 'ok');
+  } catch (e) {
+    swarmSend({ op: 'forward.err', req_id: msg.req_id, err: String(e).slice(0, 200) });
+  }
+}
 function swarmStartHeartbeat() {
   swarmStopHeartbeat();
   SWARM.hb = setInterval(() => {
-    swarmSend({ op: 'heartbeat', eligibility: swarmEligibility(), models_ready: [...SWARM.engines.keys()] });
+    swarmSend({ op: 'heartbeat', eligibility: swarmEligibility(), models_ready: [...SWARM.engines.keys()], loaded_shards: [...SWARM.shards.keys()] });
   }, 5000);
 }
 function swarmStopHeartbeat() { if (SWARM.hb) { clearInterval(SWARM.hb); SWARM.hb = null; } }
@@ -1790,7 +1835,7 @@ function swarmConnect() {
       op: 'capabilities', runtime: 'webgpu', tier_hint: tier, gpu_name: 'webgpu',
       vram_mb: 0, max_shards: 1, rtt_anchor_ms: 0, user_agent: navigator.userAgent,
       eligibility: swarmEligibility(), webllm_models: swarmModels(tier),
-      models_ready: [...SWARM.engines.keys()],
+      models_ready: [...SWARM.engines.keys()], loaded_shards: [...SWARM.shards.keys()],
     });
     swarmStartHeartbeat();
     log('swarm: joined /ws/swarm as a generation node', 'ok');
@@ -1799,7 +1844,9 @@ function swarmConnect() {
     let m; try { m = JSON.parse(evt.data); } catch (_) { return; }
     if (m.op === 'hello.ack') { SWARM.agentId = m.agent_id; return; }
     if (m.op === 'generate') { await swarmHandleGenerate(m); return; }
-    // forward / load_shards / probe are for the model-parallel tier — ignored here.
+    if (m.op === 'load_shards') { await swarmHandleLoadShards(m); return; }
+    if (m.op === 'forward') { await swarmHandleForward(m); return; }
+    // probe / other ops are for the model-parallel tier — ignored here.
   });
   ws.addEventListener('close', () => {
     swarmStopHeartbeat(); SWARM.ws = null;
