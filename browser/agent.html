@@ -269,11 +269,12 @@
 
 <div class="wrap">
 
-  <h1>Earn MYAI in your <span class="grad">browser tab</span><span class="pill beta">BETA</span></h1>
+  <h1>Become a <span class="grad">qualified verifier</span> for AI agents<span class="pill beta">BETA</span></h1>
   <p class="lede">
-    Your device joins the MyAi compute network as a worker. We send small jobs
-    (verifier votes, embeddings, page-OCR) to your tab's WebGPU; you get paid in
-    MYAI for each job. Closing the tab stops the node.
+    AI agents need independent judges. Your browser becomes a <strong>qualified
+    verifier node</strong>: it scores AI outputs (verifier votes) and runs embeddings
+    and page-OCR on your tab's WebGPU — and you get paid in MYAI for every job.
+    No install, no wallet. Closing the tab stops the node.
   </p>
 
   <div id="gpuBanner" class="banner warn">Checking WebGPU support…</div>
@@ -324,6 +325,12 @@
           <button id="startBtn" class="sm" style="background:var(--grad);color:white;border:none;">▶ Start earning</button>
           <button id="stopBtn" class="danger" disabled>Stop</button>
         </div>
+      </div>
+
+      <div class="card" id="verifierPanelCard">
+        <h3><span class="dot" style="background:#22c55e"></span>Qualified verifier panel <span class="small" style="color:var(--muted);font-weight:400;">tier 3 · browser</span></h3>
+        <p class="small" style="margin-bottom:0.5rem;">Curated models approved to cast verifier votes from a browser. One click loads the model and registers this tab as a qualified verifier for it.</p>
+        <div id="verifierPanelList" class="small" style="color:var(--muted)">Loading panel…</div>
       </div>
 
       <div class="card">
@@ -432,16 +439,29 @@
   </div>
 </div>
 
-<!-- Verifier model list (kept from previous; rendered if API responds) -->
+<!-- Qualified verifier panel loader (#9051). Tries the coordinator's public
+     panel endpoint; falls back to the curated tier-3 seed list so the panel
+     always renders. (Old code hit /v1/admin/* which is admin-token gated.) -->
 <script>
   (async function loadVerifierModels() {
+    const FALLBACK = [
+      { tier_class: 'tier_3', model: 'onnx-community/Qwen2.5-0.5B-Instruct',       note: 'Browser text-gen, fast' },
+      { tier_class: 'tier_3', model: 'onnx-community/Llama-3.2-1B-Instruct-q4f16', note: 'Browser text-gen, balanced' },
+      { tier_class: 'tier_3', model: 'HuggingFaceTB/SmolLM2-360M-Instruct',        note: 'Browser text-gen, smallest' },
+      { tier_class: 'tier_3', model: 'Xenova/all-MiniLM-L6-v2',                    note: 'Browser embedding (RAG)' },
+    ];
+    let rows = null;
     try {
-      const resp = await fetch('https://api.myaitoken.io/v1/admin/qualified-verifiers', { headers: { 'Accept': 'application/json' } }).catch(() => null);
+      const resp = await fetch('https://api.myaitoken.io/v1/verifier-panel',
+                               { headers: { 'Accept': 'application/json' } }).catch(() => null);
       if (resp && resp.ok) {
         const data = await resp.json();
-        window.__qualifiedVerifierModels = Array.isArray(data) ? data : (data.models || []);
+        rows = Array.isArray(data) ? data : (data.models || data.panel || null);
       }
-    } catch (_) { /* fallback ignored */ }
+    } catch (_) { /* fall through to seed list */ }
+    window.__qualifiedVerifierModels = (rows && rows.length ? rows : FALLBACK)
+      .filter(r => (r.tier_class || r.tier || 'tier_3') === 'tier_3');
+    window.dispatchEvent(new Event('verifier-panel-ready'));
   })();
 </script>
 
@@ -1930,10 +1950,61 @@ async function loadState() {
   }
 }
 
+// ── #9051: qualified-verifier panel with one-click load ─────────────────────
+function renderVerifierPanel() {
+  const box = document.getElementById('verifierPanelList');
+  if (!box) return;
+  const rows = window.__qualifiedVerifierModels || [];
+  if (!rows.length) { box.textContent = 'Panel unavailable right now.'; return; }
+  const sel = document.getElementById('modelSel');
+  const loadable = new Set(Array.from(sel ? sel.options : []).map(o => o.value));
+  box.innerHTML = '';
+  rows.forEach(r => {
+    const id = r.model || '';
+    const note = r.note || '';
+    const name = id.split('/').pop();
+    const active = STATE.modelId === id;
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(127,127,127,.12)';
+    row.innerHTML = `<div style="flex:1;min-width:0"><div style="font-size:0.8rem;${active ? 'color:#22c55e;font-weight:600;' : ''}">${name}${active ? ' · active' : ''}</div>` +
+                    `<div class="small" style="color:var(--muted)">${note}</div></div>`;
+    if (loadable.has(id)) {
+      const b = document.createElement('button');
+      b.className = 'sm';
+      b.textContent = active ? '✓ Loaded' : '▶ Verify with this';
+      b.disabled = active;
+      if (!active) b.style.cssText = 'white-space:nowrap;background:var(--grad);color:white;border:none;';
+      b.onclick = async () => {
+        try {
+          if (sel) sel.value = id;
+          STATE.modelId = id;
+          await dbSet('state', 'modelId', id);
+          STATE.modelPipeline = null;
+          const mb = document.getElementById('modelBadge'); if (mb) mb.textContent = 'not loaded';
+          log(`verifier panel: switched local model to ${name}`, 'info');
+          if (STATE.agentId) { log('re-registering as qualified verifier…', 'mut'); await registerAgent(); }
+          renderStatus();
+          renderVerifierPanel();
+        } catch (e) { log('panel switch failed: ' + e.message, 'warn'); }
+      };
+      row.appendChild(b);
+    } else {
+      const tag = document.createElement('span');
+      tag.className = 'small';
+      tag.style.color = 'var(--muted)';
+      tag.textContent = 'auto-used';
+      row.appendChild(tag);
+    }
+    box.appendChild(row);
+  });
+}
+window.addEventListener('verifier-panel-ready', renderVerifierPanel);
+
 (async function bootstrap() {
   log('MyAI agent v1 booting…', 'info');
   await loadState();
   bindUI();
+  renderVerifierPanel();
   renderWallet();
   renderStatus();
   await checkWebGPU();
