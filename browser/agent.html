@@ -1966,14 +1966,16 @@ function renderVerifierPanel() {
     const active = STATE.modelId === id;
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(127,127,127,.12)';
-    row.innerHTML = `<div style="flex:1;min-width:0"><div style="font-size:0.8rem;${active ? 'color:#22c55e;font-weight:600;' : ''}">${name}${active ? ' · active' : ''}</div>` +
-                    `<div class="small" style="color:var(--muted)">${note}</div></div>`;
+    row.innerHTML = `<div style="flex:1 1 auto;min-width:0;overflow:hidden"><div style="font-size:0.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${active ? 'color:#22c55e;font-weight:600;' : ''}">${name}${active ? ' · active' : ''}</div>` +
+                    `<div class="small" style="color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${note}</div></div>`;
     if (loadable.has(id)) {
       const b = document.createElement('button');
       b.className = 'sm';
       b.textContent = active ? '✓ Loaded' : '▶ Verify with this';
       b.disabled = active;
-      if (!active) b.style.cssText = 'white-space:nowrap;background:var(--grad);color:white;border:none;';
+      // button.sm is width:100% globally — pin it so the flex row keeps its shape
+      b.style.cssText = 'width:auto;flex:0 0 auto;white-space:nowrap;' +
+                        (active ? '' : 'background:var(--grad);color:white;border:none;');
       b.onclick = async () => {
         try {
           if (sel) sel.value = id;
