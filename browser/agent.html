@@ -452,11 +452,12 @@
     ];
     let rows = null;
     try {
-      const resp = await fetch('https://api.myaitoken.io/v1/verifier-panel',
+      const resp = await fetch('https://api.myaitoken.io/api/v1/verifier-panel?tier_class=tier_3',
                                { headers: { 'Accept': 'application/json' } }).catch(() => null);
       if (resp && resp.ok) {
         const data = await resp.json();
-        rows = Array.isArray(data) ? data : (data.models || data.panel || null);
+        rows = Array.isArray(data) ? data
+             : ((data.data && data.data.models) || data.models || data.panel || null);
       }
     } catch (_) { /* fall through to seed list */ }
     window.__qualifiedVerifierModels = (rows && rows.length ? rows : FALLBACK)
