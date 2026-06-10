@@ -737,14 +737,42 @@ async function deviceFingerprint() {
   return STATE.deviceFingerprint;
 }
 
-async function hmacTriple(secretHex) {
-  // For HMAC re-register: ts/nonce/sig over agent_id + ts + nonce, signed with agent_secret
+// base64url helpers — the agent_secret arrives base64url-encoded and the
+// signature must be base64url (no padding) to match coordinator
+// api/security/hmac_auth.sign(). (Earlier this used hex on both ends, so the
+// triple never verified — the reason browser nodes showed no HMAC.)
+function b64urlToBuf(s) {
+  s = s.replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out.buffer;
+}
+function bufToB64url(buf) {
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function hmacTriple(secretB64) {
+  // ts/nonce/sig over `agent_id|ts|nonce`, signed with the raw agent_secret.
   const ts = Math.floor(Date.now() / 1000).toString();
   const nonce = bufToHex(crypto.getRandomValues(new Uint8Array(16)));
   const msg = `${STATE.agentId}|${ts}|${nonce}`;
-  const key = await crypto.subtle.importKey('raw', hexToBuf(secretHex), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const sig = bufToHex(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(msg)));
+  const key = await crypto.subtle.importKey('raw', b64urlToBuf(secretB64), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = bufToB64url(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(msg)));
   return { ts, nonce, sig };
+}
+
+// HMAC-triple headers for agent-plane calls; {} until a secret is held.
+async function agentAuthHeaders() {
+  if (!STATE.agentId || !STATE.agentSecret) return {};
+  try {
+    const t = await hmacTriple(STATE.agentSecret);
+    return { 'X-Agent-Ts': t.ts, 'X-Agent-Nonce': t.nonce, 'X-Agent-Sig': t.sig };
+  } catch (e) { return {}; }
 }
 
 // ─── 5. Wallet ─────────────────────────────────────────────────────────────
@@ -905,7 +933,9 @@ async function coordPost(path, body) {
   return { status: r.status, body: json };
 }
 async function coordGet(path) {
-  const r = await fetch(STATE.coordinator + path);
+  const headers = await agentAuthHeaders();
+  const opts = Object.keys(headers).length ? { headers } : undefined;
+  const r = await fetch(STATE.coordinator + path, opts);
   const text = await r.text();
   let json = null; try { json = JSON.parse(text); } catch { json = { raw: text }; }
   return { status: r.status, body: json };
@@ -960,10 +990,11 @@ async function registerAgent() {
     STATE.agentId = data.agent_id;
     await dbSet('state', 'agentId', STATE.agentId);
   }
-  if (data?.agent_secret) {
-    STATE.agentSecret = data.agent_secret;
+  const _secret = data?.agent_secret_b64 || data?.agent_secret;
+  if (_secret) {
+    STATE.agentSecret = _secret;
     await dbSet('state', 'agentSecret', STATE.agentSecret);
-    log('agent_secret persisted', 'mut');
+    log('agent_secret persisted (HMAC auth enabled)', 'mut');
   }
   // task #9084: coordinator-assigned model
   if (data?.assigned_model) {

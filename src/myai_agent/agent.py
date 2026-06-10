@@ -15,6 +15,10 @@ import socket
 import sys
 import threading
 import time
+import base64
+import hashlib
+import hmac
+import secrets
 import urllib.error
 import urllib.request
 import uuid
@@ -53,7 +57,8 @@ REQUIRED_MODELS: List[str] = [
 
 # ── HTTP ───────────────────────────────────────────────────────────────────────
 
-def http(method: str, url: str, body: dict = None, timeout: int = 30) -> dict:
+def http(method: str, url: str, body: dict = None, timeout: int = 30,
+         extra_headers: dict = None) -> dict:
     """Minimal HTTP client — no external deps."""
     data = json.dumps(body).encode() if body else None
     headers = {
@@ -61,6 +66,8 @@ def http(method: str, url: str, body: dict = None, timeout: int = 30) -> dict:
         "Accept": "application/json",
         "User-Agent": f"myai-agent/{VERSION}",
     }
+    if extra_headers:
+        headers.update(extra_headers)
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -88,6 +95,63 @@ def load_agent_id() -> str:
     agent_id = str(uuid.uuid4())
     open(path, "w").write(agent_id)
     return agent_id
+
+
+# ── Agent secret / HMAC auth ────────────────────────────────────────────────
+# The coordinator issues a base64url agent_secret at /register. We persist it
+# and sign agent-plane calls (jobs/pending, jobs/complete, heartbeat) with an
+# HMAC triple so the coordinator can authenticate us as THIS agent. The
+# signature exactly mirrors coordinator api/security/hmac_auth.sign():
+#   base64url( HMAC_SHA256(raw_secret, f"{agent_id}|{ts}|{nonce}") )  (no pad)
+
+def _agent_secret_path() -> str:
+    config_dir = get_config_dir()
+    os.makedirs(config_dir, exist_ok=True)
+    return os.path.join(config_dir, "agent_secret")
+
+
+def load_agent_secret() -> Optional[str]:
+    """Base64url agent_secret issued at registration (None until issued)."""
+    path = _agent_secret_path()
+    if os.path.exists(path):
+        return open(path).read().strip() or None
+    return None
+
+
+def save_agent_secret(secret_b64: str) -> None:
+    try:
+        path = _agent_secret_path()
+        with open(path, "w") as f:
+            f.write(secret_b64.strip())
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+    except OSError as e:
+        log.warning("could not persist agent_secret: %s", e)
+
+
+def _b64url_decode(s: str) -> bytes:
+    pad = "=" * (-len(s) % 4)
+    return base64.urlsafe_b64decode(s + pad)
+
+
+def agent_auth_headers(agent_id: str, secret_b64: Optional[str]) -> Dict[str, str]:
+    """HMAC-triple headers for agent-plane calls; {} when no secret is held."""
+    if not secret_b64:
+        return {}
+    try:
+        secret = _b64url_decode(secret_b64)
+        ts = str(int(time.time()))
+        nonce = secrets.token_hex(16)
+        msg = f"{agent_id}|{ts}|{nonce}".encode()
+        sig = base64.urlsafe_b64encode(
+            hmac.new(secret, msg, hashlib.sha256).digest()
+        ).rstrip(b"=").decode()
+        return {"X-Agent-Ts": ts, "X-Agent-Nonce": nonce, "X-Agent-Sig": sig}
+    except Exception as e:
+        log.debug("agent_auth_headers failed: %s", e)
+        return {}
 
 
 # ── Ollama ─────────────────────────────────────────────────────────────────────
@@ -215,6 +279,7 @@ class MyAIAgent:
         self.poll_interval      = poll_interval
         self.heartbeat_interval = heartbeat_interval
         self.agent_id           = load_agent_id()
+        self.agent_secret       = load_agent_secret()
         self.required_models    = required_models if required_models is not None else REQUIRED_MODELS
         self._running           = False
         # v3-C attestation -- per-node ECDSA P-256 key, persisted at
@@ -291,6 +356,12 @@ class MyAIAgent:
             log.debug("Register request failed: %s", e)
             resp = {}
         if resp.get("success"):
+            _data = resp.get("data", {}) or {}
+            _new_secret = _data.get("agent_secret_b64")
+            if _new_secret:
+                self.agent_secret = _new_secret
+                save_agent_secret(_new_secret)
+                log.info("agent_secret issued + persisted (HMAC auth enabled)")
             log.info(f"Registered as '{self.name}' (id={self.agent_id})")
             if gpus:
                 log.info(f"  GPUs   : {', '.join(g['name'] for g in gpus)}")
@@ -312,7 +383,8 @@ class MyAIAgent:
                 body.update(self.attest.sign_envelope(self.agent_id))
             resp = http("POST",
                         f"{self.coordinator_url}/api/v1/agents/{self.agent_id}/heartbeat",
-                        body)
+                        body,
+                        extra_headers=agent_auth_headers(self.agent_id, self.agent_secret))
             if resp.get("success"):
                 log.debug("Heartbeat ok")
             else:
@@ -327,7 +399,8 @@ class MyAIAgent:
             body.update(self.attest.sign_envelope(self.agent_id))
         http("POST",
              f"{self.coordinator_url}/api/v1/agents/{self.agent_id}/jobs/{job_id}/complete",
-             body)
+             body,
+             extra_headers=agent_auth_headers(self.agent_id, self.agent_secret))
 
     def _process_job(self, job: dict):
         job_id = job.get("job_id", "unknown")
@@ -357,7 +430,8 @@ class MyAIAgent:
             try:
                 resp = http("GET",
                             f"{self.coordinator_url}/api/v1/agents/{self.agent_id}/jobs/pending",
-                            timeout=10)
+                            timeout=10,
+                            extra_headers=agent_auth_headers(self.agent_id, self.agent_secret))
                 for job in resp.get("data", {}).get("jobs", []):
                     self._process_job(job)
             except Exception as e:
