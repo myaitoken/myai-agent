@@ -1189,50 +1189,29 @@ def _version_tuple(v: str):
 
 
 def check_for_update() -> bool:
-    try:
-        resp = http("GET", f"{COORDINATOR_URL}/api/v1/agents/version", timeout=10)
-        latest = resp.get("version", "")
-        url    = resp.get("url", "")
-        if not latest or not url:
-            return False
-        if _version_tuple(latest) <= _version_tuple(AGENT_VERSION):
-            log.debug(f"Agent up to date (v{AGENT_VERSION})")
-            return False
+    """Remote auto-update DISABLED — security fix (board #9671).
 
-        log.info(f"New agent version available: {latest} (current: {AGENT_VERSION})")
-        log.info(f"Downloading from {url}...")
+    The previous implementation polled the coordinator version endpoint for a
+    {version, url} pair, downloaded the coordinator-supplied URL over the
+    network with NO signature check and NO certificate/host pinning (only a
+    substring "sanity check"), overwrote this running file with the downloaded
+    bytes, and self-exec'd the interpreter. That is a remote-code-execution
+    path: a MITM on the download or a compromised/rogue coordinator could run
+    arbitrary code on every provider box. It has been removed.
 
-        req = urllib.request.Request(url, headers={"Accept": "text/plain"})
-        with urllib.request.urlopen(req, timeout=30) as r:
-            new_script = r.read()
-
-        if b"def register" not in new_script or b"def poll_loop" not in new_script:
-            log.error("Downloaded script failed sanity check — aborting update")
-            return False
-
-        script_path = os.path.abspath(__file__)
-        backup_path = script_path + ".bak"
-        shutil.copy2(script_path, backup_path)
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".py",
-                                          dir=os.path.dirname(script_path))
-        tmp.write(new_script)
-        tmp.close()
-        shutil.move(tmp.name, script_path)
-
-        log.info(f"Updated to v{latest} — restarting...")
-        os.execv(sys.executable, [sys.executable] + sys.argv)
-        return True
-
-    except Exception as e:
-        log.warning(f"Auto-update check failed: {e}")
-        return False
+    Updates are delivered out-of-band via the packaged installer or the
+    canonical `myai-agent` PyPI package (`pip install -U myai-agent`), which
+    performs no self-fetch-and-exec. This function is retained as an inert
+    no-op so existing call sites keep working without any network fetch or
+    code execution.
+    """
+    return False
 
 
 def auto_update_loop():
-    time.sleep(300)
-    while True:
-        check_for_update()
-        time.sleep(3600)
+    # Auto-update loop disabled (board #9671). Inert no-op: no polling,
+    # no download, no exec. Kept so any thread target reference is harmless.
+    return
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -1311,7 +1290,6 @@ if __name__ == "__main__":
     else:
         log.warning("  Auth        : none configured — set AGENT_WALLET_KEY in agent.env")
 
-    check_for_update()
 
     for attempt in range(5):
         if register():
@@ -1323,7 +1301,6 @@ if __name__ == "__main__":
         sys.exit(1)
 
     hb = threading.Thread(target=heartbeat, daemon=True); hb.start()
-    au = threading.Thread(target=auto_update_loop, daemon=True); au.start()
 
     if USE_WEBSOCKET:
         ws_thread = threading.Thread(target=ws_loop, daemon=True); ws_thread.start()
