@@ -1189,50 +1189,30 @@ def _version_tuple(v: str):
 
 
 def check_for_update() -> bool:
-    try:
-        resp = http("GET", f"{COORDINATOR_URL}/api/v1/agents/version", timeout=10)
-        latest = resp.get("version", "")
-        url    = resp.get("url", "")
-        if not latest or not url:
-            return False
-        if _version_tuple(latest) <= _version_tuple(AGENT_VERSION):
-            log.debug(f"Agent up to date (v{AGENT_VERSION})")
-            return False
-
-        log.info(f"New agent version available: {latest} (current: {AGENT_VERSION})")
-        log.info(f"Downloading from {url}...")
-
-        req = urllib.request.Request(url, headers={"Accept": "text/plain"})
-        with urllib.request.urlopen(req, timeout=30) as r:
-            new_script = r.read()
-
-        if b"def register" not in new_script or b"def poll_loop" not in new_script:
-            log.error("Downloaded script failed sanity check — aborting update")
-            return False
-
-        script_path = os.path.abspath(__file__)
-        backup_path = script_path + ".bak"
-        shutil.copy2(script_path, backup_path)
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".py",
-                                          dir=os.path.dirname(script_path))
-        tmp.write(new_script)
-        tmp.close()
-        shutil.move(tmp.name, script_path)
-
-        log.info(f"Updated to v{latest} — restarting...")
-        os.execv(sys.executable, [sys.executable] + sys.argv)
-        return True
-
-    except Exception as e:
-        log.warning(f"Auto-update check failed: {e}")
-        return False
+    # SECURITY (#9671): the former auto-update path downloaded a coordinator-
+    # supplied script over the network and os.execv'd it after only a substring
+    # "sanity check" -- no cryptographic signature and no certificate/host pin.
+    # A compromised or MITM'd coordinator response was remote code execution on
+    # every agent host. That self-updating raw-.py exec is RETIRED and now fails
+    # closed (this function is a no-op).
+    #
+    # Updates ship out-of-band instead:
+    #   * canonical agent -> pip / PyPI (see src/myai_agent)
+    #   * legacy install  -> re-run install.sh
+    #   * windows frozen  -> signed installer (frozen builds never self-updated)
+    #
+    # Re-enabling remote update REQUIRES verifying a DETACHED cryptographic
+    # signature over the downloaded artifact against a PINNED public key BEFORE
+    # anything is written or executed, over HTTPS with a pinned host. Substring
+    # or version checks are NOT sufficient. Until that key infrastructure exists,
+    # do not download-and-exec anything.
+    return False
 
 
 def auto_update_loop():
-    time.sleep(300)
-    while True:
-        check_for_update()
-        time.sleep(3600)
+    # Disabled (#9671): no network-fetch-and-exec loop. Retained as a no-op so
+    # any residual thread-target reference stays valid.
+    return
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -1311,8 +1291,6 @@ if __name__ == "__main__":
     else:
         log.warning("  Auth        : none configured — set AGENT_WALLET_KEY in agent.env")
 
-    check_for_update()
-
     for attempt in range(5):
         if register():
             break
@@ -1323,7 +1301,6 @@ if __name__ == "__main__":
         sys.exit(1)
 
     hb = threading.Thread(target=heartbeat, daemon=True); hb.start()
-    au = threading.Thread(target=auto_update_loop, daemon=True); au.start()
 
     if USE_WEBSOCKET:
         ws_thread = threading.Thread(target=ws_loop, daemon=True); ws_thread.start()
