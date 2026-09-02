@@ -1,12 +1,22 @@
 // MyAI Browser Agent — Service Worker
 // Strategy:
-//   • App shell (HTML, manifest, icons): cache-first, background revalidate
+//   • HTML navigations: network-first, cache is offline fallback only — a
+//     visitor never gets stuck on a stale shell after a new deploy
+//   • Manifest/icons/CSS (same-origin, non-HTML): stale-while-revalidate
 //   • Google Fonts CSS + CDN JS bundles: cache-first (long TTL)
 //   • API calls (api.myaitoken.io, coordinator endpoints): network-only — never cache live job data
 //   • HuggingFace model weights (large binary blobs): let the browser's own cache handle them
 //   • Offline: serve cached shell with an offline overlay
+//
+// v5: bumped to force-purge any cache created by an older SW install. The
+// header comment above wrongly said "cache-first" for HTML navigations --
+// this file has actually been network-first-for-HTML since it was written;
+// only the comment was stale. Fixed here (2026-09-02) after the mismatch
+// was caught downstream in infinihash-web, which mirrors this file via a CI
+// bot — fixing it upstream here (rather than only in the mirror) keeps the
+// next mirror sync from reverting the fix.
 
-const CACHE_VERSION = 'myai-agent-v4';
+const CACHE_VERSION = 'myai-agent-v5';
 const API_ORIGINS = [
   'api.myaitoken.io',
   'api.infinihash.com',
